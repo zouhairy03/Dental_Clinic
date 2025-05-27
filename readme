@@ -1,0 +1,189 @@
+<?php
+require_once 'config.php';
+
+// Calendar parameters
+$currentMonth = $_GET['month'] ?? date('Y-m');
+$search = $_GET['search'] ?? '';
+$date = new DateTime($currentMonth . '-01');
+$firstDayOfMonth = $date->format('Y-m-01');
+$lastDayOfMonth = $date->format('Y-m-t');
+$prevMonth = (clone $date)->modify('-1 month')->format('Y-m');
+$nextMonth = (clone $date)->modify('+2 month')->format('Y-m'); // +2 because we already subtracted 1
+
+// Fetch appointments for the month
+$stmt = $pdo->prepare("SELECT a.*, p.full_name AS patient_name 
+                      FROM appointments a 
+                      LEFT JOIN patients p ON a.patient_id = p.id 
+                      WHERE a.appointment_date BETWEEN ? AND ? 
+                      AND p.full_name LIKE ?
+                      ORDER BY appointment_date, appointment_time");
+$stmt->execute([$firstDayOfMonth, $lastDayOfMonth, "%$search%"]);
+$appointments = $stmt->fetchAll();
+
+// Group appointments by date
+$appointmentsByDate = [];
+foreach ($appointments as $appt) {
+    $appointmentsByDate[$appt['appointment_date']][] = $appt;
+}
+
+// Calendar calculations
+$firstDayOfWeek = $date->format('N'); // 1 (Mon) - 7 (Sun)
+$daysInMonth = $date->format('t');
+$daysFromPrevMonth = $firstDayOfWeek - 1;
+$totalCells = ceil(($daysInMonth + $daysFromPrevMonth) / 7) * 7;
+$daysFromNextMonth = $totalCells - ($daysInMonth + $daysFromPrevMonth);
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Keep existing head content -->
+    <style>
+        .calendar-grid {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        .calendar-day {
+            min-height: 120px;
+            border-right: 1px solid #dee2e6;
+            border-bottom: 1px solid #dee2e6;
+            padding: 0.5rem;
+            transition: all 0.2s ease;
+        }
+        .calendar-day:hover {
+            background: var(--secondary);
+        }
+        .calendar-day.prev-next-month {
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+        .event-badge {
+            font-size: 0.8em;
+            background: var(--primary);
+            color: white;
+            border-radius: 4px;
+            padding: 2px 5px;
+            margin: 2px 0;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .today {
+            background: #e3f2fd !important;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="p-4">
+    <!-- Keep alerts and breadcrumb -->
+    <?php if (isset($_GET['success'])): ?>
+        <div class="alert alert-success shadow-sm border-0 animate__animated animate__fadeInDown">Appointment added successfully.</div>
+    <?php elseif (isset($_GET['error'])): ?>
+        <div class="alert alert-danger shadow-sm border-0 animate__animated animate__fadeInDown">Failed to add appointment. Please try again.</div>
+    <?php endif; ?>
+
+    <div class="container">
+        <!-- Calendar Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="mb-0 text-primary">
+                <i class="fas fa-calendar-alt me-2"></i>
+                <?= $date->format('F Y') ?>
+            </h3>
+            <div>
+                <a href="?month=<?= $prevMonth ?>&search=<?= urlencode($search) ?>" 
+                   class="btn btn-outline-primary">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+                <a href="?month=<?= $nextMonth ?>&search=<?= urlencode($search) ?>" 
+                   class="btn btn-outline-primary">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+
+        <!-- Search Form -->
+        <form method="get" class="mb-4">
+            <input type="hidden" name="month" value="<?= $currentMonth ?>">
+            <div class="input-group">
+                <input type="text" name="search" value="<?= htmlspecialchars($search) ?>"
+                       class="form-control border-0 py-2" placeholder="Search by patient name...">
+                <button class="btn btn-outline-primary border-0" type="submit">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </form>
+
+        <!-- Calendar Grid -->
+        <div class="calendar-grid">
+            <!-- Weekdays Header -->
+            <div class="row row-cols-7 g-0 text-center bg-light">
+                <?php foreach (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as $day): ?>
+                    <div class="col p-2 border-end"><small><?= $day ?></small></div>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- Calendar Days -->
+            <div class="row row-cols-7 g-0">
+                <?php
+                // Previous month days
+                $prevMonthDate = (clone $date)->modify('-1 month');
+                for ($i = $daysFromPrevMonth - 1; $i >= 0; $i--) {
+                    $day = $prevMonthDate->format('t') - $i;
+                    $currentDate = $prevMonthDate->format('Y-m') . '-' . str_pad($day, 2, '0', STR_PAD_LEFT);
+                    ?>
+                    <div class="col calendar-day prev-next-month">
+                        <div class="p-2">
+                            <small><?= $day ?></small>
+                        </div>
+                    </div>
+                    <?php
+                }
+
+                // Current month days
+                $today = date('Y-m-d');
+                for ($day = 1; $day <= $daysInMonth; $day++) {
+                    $currentDate = $date->format('Y-m') . '-' . str_pad($day, 2, '0', STR_PAD_LEFT);
+                    $isToday = ($currentDate === $today) ? 'today' : '';
+                    ?>
+                    <div class="col calendar-day <?= $isToday ?>">
+                        <div class="p-2">
+                            <small><?= $day ?></small>
+                            <?php if (!empty($appointmentsByDate[$currentDate])): ?>
+                                <div class="mt-1">
+                                    <?php foreach ($appointmentsByDate[$currentDate] as $appt): ?>
+                                        <div class="event-badge" 
+                                             data-bs-toggle="modal" 
+                                             data-bs-target="#viewModal<?= $appt['id'] ?>">
+                                            <?= htmlspecialchars($appt['patient_name']) ?><br>
+                                            <small><?= $appt['appointment_time'] ?></small>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php
+                }
+
+                // Next month days
+                $nextMonthDate = (clone $date)->modify('+1 month');
+                for ($day = 1; $day <= $daysFromNextMonth; $day++) {
+                    ?>
+                    <div class="col calendar-day prev-next-month">
+                        <div class="p-2">
+                            <small><?= $day ?></small>
+                        </div>
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keep existing modals and scripts -->
+</body>
+</html>
