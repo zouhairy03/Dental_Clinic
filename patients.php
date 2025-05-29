@@ -1,6 +1,15 @@
 <?php
 require_once 'config.php';
 
+// Add columns if they don't exist
+try {
+    $pdo->query("ALTER TABLE patients 
+        ADD COLUMN IF NOT EXISTS address VARCHAR(255) DEFAULT NULL AFTER phone,
+        ADD COLUMN IF NOT EXISTS cna VARCHAR(20) DEFAULT NULL AFTER address");
+} catch (PDOException $e) {
+    error_log("Error adding columns: " . $e->getMessage());
+}
+
 // Handle search, sort, and filters
 $search = $_GET['search'] ?? '';
 $workTypeFilter = $_GET['work_type'] ?? '';
@@ -15,7 +24,10 @@ $conditions = [];
 $params = [];
 
 if (!empty($search)) {
-    $conditions[] = "full_name LIKE ?";
+    $conditions[] = "(full_name LIKE ? OR phone LIKE ? OR address LIKE ? OR cna LIKE ?)";
+    $params[] = "%$search%";
+    $params[] = "%$search%";
+    $params[] = "%$search%";
     $params[] = "%$search%";
 }
 
@@ -77,9 +89,7 @@ $averageAge = round($summary['average_age'], 1);
 
         body {
             font-family: 'Poppins', sans-serif;
-            background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="%232cb5a033" d="M44.6,-58.1C56.3,-49.6,62.6,-33.3,66.1,-16.8C69.6,-0.3,70.4,16.5,63.9,29.1C57.4,41.7,43.7,50.2,29.9,56.9C16.1,63.6,2.2,68.5,-12.6,67.7C-27.4,66.8,-42.9,60.2,-55.4,50.3C-67.9,40.4,-77.3,27.2,-79.9,12.6C-82.5,-2.1,-78.3,-18.2,-69.3,-31.1C-60.3,-44,-46.5,-53.7,-32.3,-61.3C-18.1,-68.9,-3.5,-74.4,12.1,-71.3C27.7,-68.2,55.4,-56.5,62.7,-42.5C70,-28.5,57,-12.3,53.9,2.1C50.8,16.5,57.6,33,55.9,47.8C54.2,62.6,44,75.7,31.8,81.8C19.6,87.9,5.3,87.1,-8.2,84.1C-21.7,81.2,-35.3,76.1,-45.6,67.3C-55.9,58.4,-62.8,45.8,-68.9,33.3C-75,20.8,-80.3,8.4,-79.8,-3.7C-79.3,-15.8,-73,-31.6,-63.3,-44.5C-53.6,-57.4,-40.5,-67.4,-26.6,-74.3C-12.7,-81.1,2,-84.8,16.4,-83.3C30.8,-81.8,45.1,-75,56.8,-65.3C68.5,-55.5,77.7,-42.7,81.2,-28.6C84.7,-14.5,82.5,0.9,76.5,13.4C70.5,25.8,60.7,35.3,49.9,44.3C39.1,53.3,27.3,61.8,14.1,64.3C0.9,66.8,-13.6,63.4,-25.4,57.5C-37.2,51.6,-46.3,43.3,-54.3,34.1C-62.3,24.9,-69.2,14.8,-71.7,3.3C-74.3,-8.3,-72.5,-21.3,-66.3,-32.2C-60.1,-43.1,-49.5,-51.9,-37.8,-60.3C-26.1,-68.7,-13,-76.6,1.1,-78.6C15.2,-80.6,30.5,-76.7,44.6,-58.1Z"/></svg>'),
-                        linear-gradient(160deg, #f8f9fa 0%, #e3f2fd 100%);
-            background-size: cover;
+            background: linear-gradient(160deg, #f8f9fa 0%, #e3f2fd 100%);
             animation: fadeIn 0.5s ease-in-out both;
         }
 
@@ -93,16 +103,6 @@ $averageAge = round($summary['average_age'], 1);
             padding: 1rem;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-
-        .breadcrumb-item a {
-            color: var(--primary);
-            text-decoration: none;
-            transition: all 0.2s ease;
-        }
-
-        .breadcrumb-item a:hover {
-            color: #1f8e7d;
         }
 
         .table {
@@ -143,11 +143,6 @@ $averageAge = round($summary['average_age'], 1);
         .btn-outline-secondary {
             border-color: var(--primary);
             color: var(--primary);
-        }
-
-        .btn-outline-secondary:hover {
-            background: var(--primary);
-            color: white;
         }
 
         .badge {
@@ -213,20 +208,24 @@ $averageAge = round($summary['average_age'], 1);
             border-bottom: 2px solid var(--primary);
         }
 
-        .page-link {
-            color: var(--primary);
-            transition: all 0.2s ease;
+        .address-truncate, .cna-truncate {
+            max-width: 150px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
         }
 
-        .page-link:hover {
-            color: #1f8e7d;
-            background: var(--secondary);
-        }
-
-        .alert {
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            border: none;
+        .address-truncate:hover, .cna-truncate:hover {
+            white-space: normal;
+            overflow: visible;
+            position: absolute;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-width: 300px;
         }
         
         .summary-card {
@@ -244,51 +243,6 @@ $averageAge = round($summary['average_age'], 1);
         
         .summary-card .card-body {
             padding: 1.5rem;
-        }
-        
-        .summary-icon {
-            font-size: 2.5rem;
-            opacity: 0.7;
-        }
-        
-        .filter-btn.active {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .appointment-badge {
-            padding: 0.3em 0.6em;
-            border-radius: 10px;
-            font-size: 0.85em;
-        }
-        
-        .badge-scheduled {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-        
-        .badge-completed {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .badge-cancelled {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .appointment-table th {
-            background: #f8f9fa;
-        }
-        
-        .stat-number {
-            font-size: 1.8rem;
-            font-weight: 600;
-        }
-        
-        .stat-label {
-            font-size: 0.9rem;
-            color: #6c757d;
         }
         
         .card-icon {
@@ -341,20 +295,124 @@ $averageAge = round($summary['average_age'], 1);
             border: none;
             background: #f8f9fa;
         }
+        
+        .map-marker, .id-card {
+            color: var(--primary);
+            margin-right: 5px;
+        }
+        
+        .cna-badge {
+            background: rgba(44, 181, 160, 0.15);
+            color: var(--primary);
+            border-radius: 5px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body class="p-4">
     <!-- Alerts -->
     <?php if (isset($_GET['success'])): ?>
-        <div class="alert alert-success shadow-sm border-0 animate__animated animate__fadeInDown mb-4">
-            <i class="fas fa-check-circle me-2"></i>Patient added successfully.
+    <?php $successType = $_GET['success']; ?>
+    <div class="alert alert-success shadow-sm border-0 mb-4 animate__animated animate__fadeInDown">
+        <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+                <i class="fas fa-check-circle fa-2x"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+                <h5 class="alert-heading mb-1">
+                    <?php switch($successType): 
+                        case 'added': ?>
+                            Patient Added Successfully
+                        <?php break; ?>
+                        <?php case 'updated': ?>
+                            Patient Updated Successfully
+                        <?php break; ?>
+                        <?php case 'deleted': ?>
+                            Patient Deleted Successfully
+                        <?php break; ?>
+                        <?php default: ?>
+                            Operation Completed Successfully
+                    <?php endswitch; ?>
+                </h5>
+                <p class="mb-0">
+                    <?php switch($successType): 
+                        case 'added': ?>
+                            The patient has been added to the system.
+                        <?php break; ?>
+                        <?php case 'updated': ?>
+                            The patient's information has been updated.
+                        <?php break; ?>
+                        <?php case 'deleted': ?>
+                            The patient has been removed from the system.
+                        <?php break; ?>
+                        <?php default: ?>
+                            The operation was completed successfully.
+                    <?php endswitch; ?>
+                </p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
-    <?php elseif (isset($_GET['error'])): ?>
-        <div class="alert alert-danger shadow-sm border-0 animate__animated animate__fadeInDown mb-4">
-            <i class="fas fa-exclamation-circle me-2"></i>Error adding patient. Please try again.
+    </div>
+<?php elseif (isset($_GET['error'])): ?>
+    <?php $errorType = $_GET['error']; ?>
+    <div class="alert alert-danger shadow-sm border-0 mb-4 animate__animated animate__shakeX">
+        <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+                <i class="fas fa-exclamation-triangle fa-2x"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+                <h5 class="alert-heading mb-1">
+                    <?php switch($errorType): 
+                        case 'add': ?>
+                            Error Adding Patient
+                        <?php break; ?>
+                        <?php case 'update': ?>
+                            Error Updating Patient
+                        <?php break; ?>
+                        <?php case 'delete': ?>
+                            Error Deleting Patient
+                        <?php break; ?>
+                        <?php case 'validation': ?>
+                            Validation Error
+                        <?php break; ?>
+                        <?php case 'db': ?>
+                            Database Error
+                        <?php break; ?>
+                        <?php default: ?>
+                            Operation Failed
+                    <?php endswitch; ?>
+                </h5>
+                <p class="mb-0">
+                    <?php switch($errorType): 
+                        case 'add': ?>
+                            We encountered an issue while adding the patient. Please try again.
+                        <?php break; ?>
+                        <?php case 'update': ?>
+                            We couldn't update the patient information. Please verify your changes.
+                        <?php break; ?>
+                        <?php case 'delete': ?>
+                            We couldn't delete the patient. Please try again.
+                        <?php break; ?>
+                        <?php case 'validation': ?>
+                            Please fill all required fields correctly.
+                        <?php break; ?>
+                        <?php case 'db': ?>
+                            A database error occurred. Technical details: <?= $_GET['message'] ?? 'No details' ?>
+                        <?php break; ?>
+                        <?php default: ?>
+                            An unexpected error occurred. Please try again later.
+                    <?php endswitch; ?>
+                </p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
-    <?php endif; ?>
+    </div>
+<?php endif; ?>
 
+<!-- Include in your head section -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
     <div class="container">
         <!-- Breadcrumb -->
         <nav class="mb-4">
@@ -496,7 +554,8 @@ $averageAge = round($summary['average_age'], 1);
                     <tr>
                         <?php
                         $columns = ['id' => 'ID', 'full_name' => 'Name', 'phone' => 'Phone', 
-                                  'working_type' => 'Working Type', 'age' => 'Age', 'created_at' => 'Created'];
+                                  'cna' => 'CNA', 'address' => 'Address', 'working_type' => 'Working Type', 
+                                  'age' => 'Age', 'created_at' => 'Created'];
                         foreach ($columns as $col => $label) {
                             $newOrder = ($sort === $col && $order === 'asc') ? 'desc' : 'asc';
                             echo "<th><a href=\"?search=$search&work_type=$workTypeFilter&sort=$col&order=$newOrder\" class=\"text-decoration-none text-dark\">$label <i class=\"fas fa-sort text-muted\"></i></a></th>";
@@ -524,10 +583,30 @@ $averageAge = round($summary['average_age'], 1);
                             $ageClass = 'age-group-senior';
                         }
                     ?>
-                        <tr class="animate__animated animate__fadeIn">
+                        <tr>
                             <td>#<?= $patient['id'] ?></td>
                             <td><?= htmlspecialchars($patient['full_name']) ?></td>
                             <td><?= htmlspecialchars($patient['phone']) ?></td>
+                            <td>
+                                <?php if (!empty($patient['cna'])): ?>
+                                    <span class="cna-truncate" title="<?= htmlspecialchars($patient['cna']) ?>">
+                                        <i class="fas fa-id-card id-card"></i>
+                                        <?= htmlspecialchars($patient['cna']) ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="cna-badge">Not provided</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if (!empty($patient['address'])): ?>
+                                    <span class="address-truncate" title="<?= htmlspecialchars($patient['address']) ?>">
+                                        <i class="fas fa-map-marker-alt map-marker"></i>
+                                        <?= htmlspecialchars($patient['address']) ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="text-muted">No address</span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <span class="badge badge-<?= str_replace(' ', '-', $patient['working_type']) ?>">
                                     <?= ucfirst($patient['working_type']) ?>
@@ -549,7 +628,7 @@ $averageAge = round($summary['average_age'], 1);
                                 <a href="edit_patient.php?id=<?= $patient['id'] ?>" class="btn btn-sm btn-outline-secondary me-2" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </a>
-                                <a href="delete_patient.php?id=<?= $patient['id'] ?>" class="btn btn-sm btn-outline-danger" title="Delete" onclick="return confirm('Are you sure you want to delete this patient?');">
+                                <a href="delete_patient.php?id=<?= $patient['id'] ?>" class="btn btn-sm btn-outline-danger" title="Delete" >
                                     <i class="fas fa-trash-alt"></i>
                                 </a>
                             </td>
@@ -576,45 +655,52 @@ $averageAge = round($summary['average_age'], 1);
 
     <!-- Add Patient Modal -->
     <div class="modal fade" id="addPatientModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <form action="add_patient.php" method="POST" class="modal-content no-shadow">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-user-plus me-2"></i>New Patient</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" name="full_name" class="form-control" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Phone</label>
-                        <input type="text" name="phone" class="form-control" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Working Type</label>
-                        <select name="working_type" class="form-select" required>
-                            <option value="student">Student</option>
-                            <option value="employed">Employed</option>
-                            <option value="self-employed">Self-Employed</option>
-                            <option value="unemployed">Unemployed</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Age</label>
-                        <input type="number" name="age" class="form-control" required min="1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form action="add_patient.php" method="POST" class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-user-plus me-2"></i>New Patient</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" name="full_name" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Phone</label>
+                            <input type="text" name="phone" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Carte Nationale (CNA)</label>
+                            <input type="text" name="cna" class="form-control" placeholder="e.g. AB123456">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Age</label>
+                            <input type="number" name="age" class="form-control" required min="1">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Address</label>
+                            <textarea name="address" class="form-control" rows="2" placeholder="Enter full address"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Working Type</label>
+                            <select name="working_type" class="form-select" required>
+                                <option value="student">Student</option>
+                                <option value="employed">Employed</option>
+                                <option value="self-employed">Self-Employed</option>
+                                <option value="unemployed">Unemployed</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="modal-footer border-0">
-                <button class="btn btn-primary px-4" type="submit"><i class="fas fa-save me-2"></i>Save</button>
-                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-            </div>
-        </form>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-primary px-4" type="submit"><i class="fas fa-save me-2"></i>Save</button>
+                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </form>
+        </div>
     </div>
-</div>
-
 
     <!-- View Patient Modal -->
     <div class="modal fade" id="viewPatientModal" tabindex="-1">
@@ -735,7 +821,7 @@ $averageAge = round($summary['average_age'], 1);
                                                             <td>${formattedAppDate}</td>
                                                             <td>${app.appointment_time}</td>
                                                             <td>${app.treatment_type}</td>
-                                                            <td><span class="appointment-badge ${statusClass}">${app.status}</span></td>
+                                                            <td><span class="badge ${statusClass}">${app.status}</span></td>
                                                             <td>${app.notes || '—'}</td>
                                                         </tr>
                                                     `;
@@ -776,6 +862,14 @@ $averageAge = round($summary['average_age'], 1);
                                                 <li class="list-group-item d-flex justify-content-between align-items-center px-0">
                                                     <span><i class="fas fa-phone me-2 text-muted"></i> Phone</span>
                                                     <span>${data.phone}</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                                    <span><i class="fas fa-id-card me-2 text-muted"></i> Carte Nationale</span>
+                                                    <span>${data.cna ? data.cna : 'Not provided'}</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                                    <span><i class="fas fa-map-marker-alt me-2 text-muted"></i> Address</span>
+                                                    <span>${data.address ? data.address : '—'}</span>
                                                 </li>
                                                 <li class="list-group-item d-flex justify-content-between align-items-center px-0">
                                                     <span><i class="fas fa-birthday-cake me-2 text-muted"></i> Age</span>

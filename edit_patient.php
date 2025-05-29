@@ -21,13 +21,15 @@ if (!$patient) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $full_name = $_POST['full_name'] ?? '';
     $phone = $_POST['phone'] ?? '';
+    $cna = $_POST['cna'] ?? ''; // Added CNA field
+    $address = $_POST['address'] ?? '';
     $working_type = $_POST['working_type'] ?? '';
     $age = (int)($_POST['age'] ?? 0);
 
     // Basic validation
     if ($full_name && $phone && $working_type && $age > 0) {
-        $updateStmt = $pdo->prepare("UPDATE patients SET full_name = ?, phone = ?, working_type = ?, age = ? WHERE id = ?");
-        $success = $updateStmt->execute([$full_name, $phone, $working_type, $age, $id]);
+        $updateStmt = $pdo->prepare("UPDATE patients SET full_name = ?, phone = ?, cna = ?, address = ?, working_type = ?, age = ? WHERE id = ?");
+        $success = $updateStmt->execute([$full_name, $phone, $cna, $address, $working_type, $age, $id]);
         if ($success) {
             header('Location: patients.php?success=updated');
             exit;
@@ -49,81 +51,203 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet" />
     <style>
-        /* Same styles as patients.php for consistency */
         :root {
             --primary: #2cb5a0;
             --secondary: #f0f7fa;
             --accent: #ff7f50;
+            --light: #f8f9fa;
+            --dark: #343a40;
+            --cna-color: #6f42c1;
         }
+        
         body {
             font-family: 'Poppins', sans-serif;
-            background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="%232cb5a033" d="M44.6,-58.1C56.3,-49.6,62.6,-33.3,66.1,-16.8C69.6,-0.3,70.4,16.5,63.9,29.1C57.4,41.7,43.7,50.2,29.9,56.9C16.1,63.6,2.2,68.5,-12.6,67.7C-27.4,66.8,-42.9,60.2,-55.4,50.3C-67.9,40.4,-77.3,27.2,-79.9,12.6C-82.5,-2.1,-78.3,-18.2,-69.3,-31.1C-60.3,-44,-46.5,-53.7,-32.3,-61.3C-18.1,-68.9,-3.5,-74.4,12.1,-71.3C27.7,-68.2,55.4,-56.5,62.7,-42.5C70,-28.5,57,-12.3,53.9,2.1C50.8,16.5,57.6,33,55.9,47.8C54.2,62.6,44,75.7,31.8,81.8C19.6,87.9,5.3,87.1,-8.2,84.1C-21.7,81.2,-35.3,76.1,-45.6,67.3C-55.9,58.4,-62.8,45.8,-68.9,33.3C-75,20.8,-80.3,8.4,-79.8,-3.7C-79.3,-15.8,-73,-31.6,-63.3,-44.5C-53.6,-57.4,-40.5,-67.4,-26.6,-74.3C-12.7,-81.1,2,-84.8,16.4,-83.3C30.8,-81.8,45.1,-75,56.8,-65.3C68.5,-55.5,77.7,-42.7,81.2,-28.6C84.7,-14.5,82.5,0.9,76.5,13.4C70.5,25.8,60.7,35.3,49.9,44.3C39.1,53.3,27.3,61.8,14.1,64.3C0.9,66.8,-13.6,63.4,-25.4,57.5C-37.2,51.6,-46.3,43.3,-54.3,34.1C-62.3,24.9,-69.2,14.8,-71.7,3.3C-74.3,-8.3,-72.5,-21.3,-66.3,-32.2C-60.1,-43.1,-49.5,-51.9,-37.8,-60.3C-26.1,-68.7,-13,-76.6,1.1,-78.6C15.2,-80.6,30.5,-76.7,44.6,-58.1Z"/></svg>'),
-                        linear-gradient(160deg, #f8f9fa 0%, #e3f2fd 100%);
-            background-size: cover;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e3f2fd 100%);
+            min-height: 100vh;
+            padding: 2rem 0;
             animation: fadeIn 0.5s ease-in-out both;
         }
+        
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to   { opacity: 1; transform: translateY(0); }
         }
+        
         .breadcrumb {
             background: rgba(255,255,255,0.9);
             padding: 1rem;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
+        
         .breadcrumb-item a {
             color: var(--primary);
             text-decoration: none;
             transition: all 0.2s ease;
         }
+        
         .breadcrumb-item a:hover {
             color: #1f8e7d;
         }
-        .btn-primary, .btn-outline-secondary {
-            padding: 0.6rem 1.5rem;
-            border-radius: 8px;
-            font-weight: 600;
+        
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            border: none;
+            overflow: hidden;
         }
+        
+        .card-header {
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            border: none;
+            padding: 1.5rem;
+        }
+        
         .btn-primary {
             background: var(--primary);
             border: none;
             transition: all 0.2s ease;
+            padding: 0.7rem 1.8rem;
+            border-radius: 8px;
+            font-weight: 600;
         }
+        
         .btn-primary:hover {
             background: #249d8b;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(44,181,160,0.3);
         }
+        
         .btn-outline-secondary {
             border-color: var(--primary);
             color: var(--primary);
+            padding: 0.7rem 1.8rem;
+            border-radius: 8px;
+            font-weight: 600;
         }
+        
         .btn-outline-secondary:hover {
             background: var(--primary);
             color: white;
         }
+        
         .form-label {
             font-weight: 600;
-            color: #444;
+            color: var(--dark);
+            margin-bottom: 0.5rem;
         }
-        .form-control, .form-select {
-            border-radius: 8px;
+        
+        .form-control, .form-select, .form-textarea {
+            border-radius: 10px;
             border: 1px solid #ddd;
-            transition: border-color 0.2s ease;
+            transition: all 0.3s ease;
+            padding: 0.8rem 1rem;
         }
-        .form-control:focus, .form-select:focus {
+        
+        .form-control:focus, .form-select:focus, .form-textarea:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 5px var(--primary);
+            box-shadow: 0 0 0 0.25rem rgba(44,181,160,0.25);
         }
+        
         .alert {
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             border: none;
         }
+        
+        .patient-info-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(44,181,160,0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            font-size: 1.2rem;
+            margin-right: 1rem;
+        }
+        
+        .form-section {
+            background: rgba(255,255,255,0.7);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .form-section-title {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid rgba(44,181,160,0.2);
+        }
+        
+        .form-section-title h5 {
+            margin: 0;
+            color: var(--primary);
+            font-weight: 600;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .form-footer {
+            display: flex;
+            justify-content: space-between;
+            padding: 1.5rem 0;
+            margin-top: 1rem;
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .patient-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 3rem;
+            margin: 0 auto 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .patient-id-badge {
+            background: var(--primary);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            display: inline-block;
+        }
+        
+        .cna-icon {
+            color: var(--cna-color);
+            margin-right: 5px;
+        }
+        
+        .cna-badge {
+            background: rgba(111, 66, 193, 0.1);
+            color: var(--cna-color);
+            border-radius: 5px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
     </style>
 </head>
-<body class="p-4">
-<div class="container" style="max-width: 600px;">
-
+<body>
+<div class="container" style="max-width: 800px;">
     <!-- Breadcrumb -->
     <nav class="mb-4" aria-label="breadcrumb">
         <ol class="breadcrumb">
@@ -133,51 +257,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </ol>
     </nav>
 
-    <h3 class="mb-4 text-primary"><i class="fas fa-user-edit me-2"></i>Edit Patient</h3>
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex align-items-center">
+                <div class="patient-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="ms-3">
+                    <h3 class="mb-0">Edit Patient</h3>
+                    <p class="mb-0">Update patient information</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card-body">
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-danger mb-4" role="alert">
+                    <i class="fas fa-exclamation-circle me-2"></i><?= htmlspecialchars($error) ?>
+                </div>
+            <?php endif; ?>
+            
+            <div class="patient-id-badge">
+                <i class="fas fa-id-card me-2"></i>ID: <?= $patient['id'] ?>
+            </div>
 
-    <?php if (!empty($error)): ?>
-        <div class="alert alert-danger mb-4" role="alert">
-            <i class="fas fa-exclamation-circle me-2"></i><?= htmlspecialchars($error) ?>
+            <form action="edit_patient.php?id=<?= $patient['id'] ?>" method="POST" novalidate>
+                <!-- Personal Information Section -->
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <div class="patient-info-icon">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <h5>Personal Information</h5>
+                    </div>
+                    
+                    <div class="form-grid">
+                        <div>
+                            <label for="full_name" class="form-label">Full Name</label>
+                            <input type="text" name="full_name" id="full_name" class="form-control" 
+                                   value="<?= htmlspecialchars($patient['full_name']) ?>" required />
+                            <div class="form-text">Patient's full name</div>
+                        </div>
+                        
+                        <div>
+                            <label for="phone" class="form-label">Phone</label>
+                            <input type="text" name="phone" id="phone" class="form-control" 
+                                   value="<?= htmlspecialchars($patient['phone']) ?>" required />
+                            <div class="form-text">Contact number</div>
+                        </div>
+                        
+                        <div>
+                            <label for="cna" class="form-label">Carte Nationale (CNA)</label>
+                            <input type="text" name="cna" id="cna" class="form-control" 
+                                   value="<?= htmlspecialchars($patient['cna'] ?? '') ?>" 
+                                   placeholder="e.g. AB123456" />
+                            <div class="form-text">National identity card number</div>
+                        </div>
+                        
+                        <div>
+                            <label for="age" class="form-label">Age</label>
+                            <input type="number" name="age" id="age" class="form-control" 
+                                   value="<?= (int)$patient['age'] ?>" min="1" max="120" required />
+                            <div class="form-text">Patient's age</div>
+                        </div>
+                        
+                        <div>
+                            <label for="working_type" class="form-label">Working Type</label>
+                            <select name="working_type" id="working_type" class="form-select" required>
+                                <?php
+                                $types = ['student' => 'Student', 'employed' => 'Employed', 
+                                          'self-employed' => 'Self-Employed', 'unemployed' => 'Unemployed'];
+                                foreach ($types as $value => $label) {
+                                    $selected = $patient['working_type'] === $value ? 'selected' : '';
+                                    echo "<option value=\"$value\" $selected>$label</option>";
+                                }
+                                ?>
+                            </select>
+                            <div class="form-text">Employment status</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Address Section -->
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <div class="patient-info-icon">
+                            <i class="fas fa-map-marker-alt"></i>
+                        </div>
+                        <h5>Address Information</h5>
+                    </div>
+                    
+                    <div>
+                        <label for="address" class="form-label">Full Address</label>
+                        <textarea name="address" id="address" class="form-control form-textarea" 
+                                  rows="4" placeholder="Enter patient's full address"><?= htmlspecialchars($patient['address'] ?? '') ?></textarea>
+                        <div class="form-text">Street, city, state, and ZIP code</div>
+                    </div>
+                </div>
+                
+                <!-- Form Actions -->
+                <div class="form-footer">
+                    <a href="patients.php" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Save Changes
+                    </button>
+                </div>
+            </form>
         </div>
-    <?php endif; ?>
-
-    <form action="edit_patient.php?id=<?= $patient['id'] ?>" method="POST" novalidate>
-        <div class="mb-3">
-            <label for="full_name" class="form-label"><i class="fas fa-user me-2"></i>Full Name</label>
-            <input type="text" name="full_name" id="full_name" class="form-control" 
-                   value="<?= htmlspecialchars($patient['full_name']) ?>" required />
-        </div>
-        <div class="mb-3">
-            <label for="phone" class="form-label"><i class="fas fa-phone me-2"></i>Phone</label>
-            <input type="text" name="phone" id="phone" class="form-control" 
-                   value="<?= htmlspecialchars($patient['phone']) ?>" required />
-        </div>
-        <div class="mb-3">
-            <label for="working_type" class="form-label"><i class="fas fa-briefcase me-2"></i>Working Type</label>
-            <select name="working_type" id="working_type" class="form-select" required>
-                <?php
-                $types = ['student' => 'Student', 'employed' => 'Employed', 'self-employed' => 'Self-Employed', 'unemployed' => 'Unemployed'];
-                foreach ($types as $value => $label) {
-                    $selected = $patient['working_type'] === $value ? 'selected' : '';
-                    echo "<option value=\"$value\" $selected>$label</option>";
-                }
-                ?>
-            </select>
-        </div>
-        <div class="mb-4">
-            <label for="age" class="form-label"><i class="fas fa-birthday-cake me-2"></i>Age</label>
-            <input type="number" name="age" id="age" class="form-control" 
-                   value="<?= (int)$patient['age'] ?>" min="1" required />
-        </div>
-        <div class="d-flex justify-content-between">
-            <a href="patients.php" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Cancel
-            </a>
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save me-2"></i>Save Changes
-            </button>
-        </div>
-    </form>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

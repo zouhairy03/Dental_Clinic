@@ -1,4 +1,5 @@
 <?php
+session_start();
 require_once 'config.php';
 
 // Only allow logged-in admins
@@ -9,6 +10,8 @@ if (!isset($_SESSION['admin_id'])) {
 
 $admin_id = $_SESSION['admin_id'];
 $message = '';
+$showPassword = false;
+$passwordViewCountdown = 59;
 
 // Fetch current admin data
 $stmt = $pdo->prepare("SELECT * FROM admins WHERE id = ?");
@@ -20,15 +23,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $username = trim($_POST['username'] ?? '');
     $password = trim($_POST['password'] ?? '');
+    $showPassword = isset($_POST['show_password']) ? (bool)$_POST['show_password'] : false;
 
     if ($name && $username) {
-        // Update query
+        // Update query - store password in plaintext
         $sql = "UPDATE admins SET name = ?, username = ?, updated_at = NOW()";
         $params = [$name, $username];
 
         if ($password !== '') {
             $sql .= ", password_hash = ?";
-            $params[] = $password; // Plaintext as requested
+            $params[] = $password;  // Store as plaintext
         }
 
         $sql .= " WHERE id = ?";
@@ -39,6 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $_SESSION['admin_name'] = $name;
         $message = 'Settings updated successfully.';
+        
         // Refresh admin data
         $stmt->execute([$admin_id]);
         $admin = $stmt->fetch();
@@ -46,138 +51,165 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = 'Name and username are required.';
     }
 }
+
+// Handle password view request
+if (isset($_GET['view_password'])) {
+    $showPassword = true;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clinic Settings - DentalCare</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-bootstrap-4/bootstrap-4.css">
-
     <style>
         :root {
             --primary: #2cb5a0;
             --secondary: #f0f7fa;
             --accent: #ff7f50;
             --dark: #1a7c6c;
+            --light: #e9f5f2;
+            --danger: #dc3545;
         }
 
         body {
             font-family: 'Poppins', sans-serif;
-            background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="%232cb5a033" d="M44.6,-58.1C56.3,-49.6,62.6,-33.3,66.1,-16.8C69.6,-0.3,70.4,16.5,63.9,29.1C57.4,41.7,43.7,50.2,29.9,56.9C16.1,63.6,2.2,68.5,-12.6,67.7C-27.4,66.8,-42.9,60.2,-55.4,50.3C-67.9,40.4,-77.3,27.2,-79.9,12.6C-82.5,-2.1,-78.3,-18.2,-69.3,-31.1C-60.3,-44,-46.5,-53.7,-32.3,-61.3C-18.1,-68.9,-3.5,-74.4,12.1,-71.3C27.7,-68.2,55.4,-56.5,62.7,-42.5C70,-28.5,57,-12.3,53.9,2.1C50.8,16.5,57.6,33,55.9,47.8C54.2,62.6,44,75.7,31.8,81.8C19.6,87.9,5.3,87.1,-8.2,84.1C-21.7,81.2,-35.3,76.1,-45.6,67.3C-55.9,58.4,-62.8,45.8,-68.9,33.3C-75,20.8,-80.3,8.4,-79.8,-3.7C-79.3,-15.8,-73,-31.6,-63.3,-44.5C-53.6,-57.4,-40.5,-67.4,-26.6,-74.3C-12.7,-81.1,2,-84.8,16.4,-83.3C30.8,-81.8,45.1,-75,56.8,-65.3C68.5,-55.5,77.7,-42.7,81.2,-28.6C84.7,-14.5,82.5,0.9,76.5,13.4C70.5,25.8,60.7,35.3,49.9,44.3C39.1,53.3,27.3,61.8,14.1,64.3C0.9,66.8,-13.6,63.4,-25.4,57.5C-37.2,51.6,-46.3,43.3,-54.3,34.1C-62.3,24.9,-69.2,14.8,-71.7,3.3C-74.3,-8.3,-72.5,-21.3,-66.3,-32.2C-60.1,-43.1,-49.5,-51.9,-37.8,-60.3C-26.1,-68.7,-13,-76.6,1.1,-78.6C15.2,-80.6,30.5,-76.7,44.6,-58.1Z"/></svg>'),
-                        linear-gradient(160deg, #f8f9fa 0%, #e3f2fd 100%);
-            background-size: cover;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            background-attachment: fixed;
             padding: 2rem;
+            min-height: 100vh;
         }
 
         .settings-card {
-            background: rgba(255,255,255,0.9);
-            border: 1px solid rgba(44,181,160,0.15);
+            background: white;
             border-radius: 20px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-            transition: transform 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: none;
         }
 
         .settings-card:hover {
-            transform: translateY(-3px);
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
         }
 
         .info-box {
-            background: rgba(255,255,255,0.9);
+            background: linear-gradient(to bottom, var(--light), white);
             border-radius: 15px;
-            padding: 1.5rem;
-            border: 1px solid rgba(44,181,160,0.1);
+            padding: 1.8rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(44, 181, 160, 0.1);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
 
         .info-label {
             color: var(--primary);
             font-weight: 500;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
+            margin-bottom: 0.3rem;
         }
 
         .info-value {
             color: #2a2a2a;
             font-weight: 600;
-            font-size: 1rem;
+            font-size: 1.1rem;
+            margin-bottom: 1.5rem;
         }
 
         .badge-last-login {
             background: linear-gradient(90deg, var(--primary), var(--accent));
             color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 1rem;
-            font-size: 0.9rem;
+            padding: 0.5rem 1.2rem;
+            border-radius: 1.2rem;
+            font-size: 0.95rem;
+            display: inline-block;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
 
         .form-control:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 0.2rem rgba(44,181,160,0.25);
+            box-shadow: 0 0 0 0.3rem rgba(44, 181, 160, 0.2);
         }
 
         .breadcrumb {
-            background: rgba(255,255,255,0.9);
+            background: white;
             border-radius: 12px;
-            padding: 1rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            padding: 1.2rem 1.5rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            margin-bottom: 2rem;
         }
 
         .alert-info {
-            background: rgba(44,181,160,0.15);
+            background: rgba(44, 181, 160, 0.15);
             border: 1px solid var(--primary);
-            color: var(--primary);
+            color: var(--dark);
             border-radius: 12px;
+            font-weight: 500;
         }
         
         .password-display {
             font-family: 'Courier New', monospace;
-            letter-spacing: 2px;
-            background: rgba(0,0,0,0.05);
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
+            letter-spacing: 1px;
+            background: rgba(0, 0, 0, 0.03);
+            padding: 0.8rem 1.2rem;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            border: 1px dashed rgba(0, 0, 0, 0.08);
         }
         
         .password-toggle {
             cursor: pointer;
             color: var(--primary);
             transition: all 0.3s ease;
+            background: rgba(44, 181, 160, 0.1);
+            border-radius: 8px;
+            padding: 0.4rem 0.8rem;
         }
         
         .password-toggle:hover {
             color: var(--dark);
-            transform: scale(1.1);
+            background: rgba(44, 181, 160, 0.2);
         }
         
         .view-button {
             background: linear-gradient(90deg, var(--primary), var(--accent));
             color: white;
             border: none;
-            border-radius: 8px;
-            padding: 0.4rem 1rem;
-            font-size: 0.9rem;
+            border-radius: 12px;
+            padding: 0.6rem 1.5rem;
+            font-size: 1rem;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
         
         .view-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
         }
         
         .password-strength {
-            height: 6px;
-            border-radius: 3px;
-            margin-top: 0.5rem;
+            height: 8px;
+            border-radius: 4px;
+            margin-top: 0.8rem;
             background: #e9ecef;
             overflow: hidden;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
         }
         
         .strength-meter {
@@ -187,67 +219,275 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .password-rules {
-            background: rgba(44,181,160,0.1);
-            border-radius: 8px;
-            padding: 1rem;
-            margin-top: 1rem;
-            border-left: 3px solid var(--primary);
+            background: rgba(44, 181, 160, 0.08);
+            border-radius: 12px;
+            padding: 1.2rem;
+            margin-top: 1.5rem;
+            border-left: 4px solid var(--primary);
+        }
+        
+        .password-rules h6 {
+            color: var(--dark);
+            font-weight: 600;
+            margin-bottom: 0.8rem;
         }
         
         .password-rules ul {
             margin-bottom: 0;
-            padding-left: 1.5rem;
+            padding-left: 1.2rem;
         }
         
         .password-rules li {
-            margin-bottom: 0.5rem;
-        }
-        
-        .password-rules li:last-child {
-            margin-bottom: 0;
+            margin-bottom: 0.6rem;
+            color: #4a5568;
         }
         
         .security-icon {
-            width: 50px;
-            height: 50px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
-            background: rgba(44,181,160,0.2);
+            background: linear-gradient(135deg, rgba(44, 181, 160, 0.2), rgba(255, 127, 80, 0.1));
             display: flex;
             align-items: center;
             justify-content: center;
             color: var(--primary);
-            font-size: 1.5rem;
+            font-size: 1.8rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
         }
         
         .security-section {
-            background: rgba(255,255,255,0.9);
-            border-radius: 15px;
-            padding: 1.5rem;
-            border: 1px solid rgba(44,181,160,0.1);
-            margin-top: 2rem;
+            background: white;
+            border-radius: 18px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            margin-top: 3rem;
         }
         
         .password-visibility-toggle {
             cursor: pointer;
             color: #6c757d;
             transition: color 0.3s;
+            background: rgba(0, 0, 0, 0.03);
+            padding: 0.5rem 0.8rem;
+            border-radius: 0 8px 8px 0;
         }
         
         .password-visibility-toggle:hover {
             color: var(--primary);
+            background: rgba(0, 0, 0, 0.05);
         }
         
-        .countdown-badge {
+        .password-view-container {
+            position: relative;
+            margin: 2rem 0;
+        }
+        
+        .password-view-wrapper {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 18px;
+            padding: 2rem;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .password-view-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 1.5rem;
+        }
+        
+        .password-view-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(44, 181, 160, 0.2), rgba(44, 181, 160, 0.1));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            font-size: 1.5rem;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .password-view-title {
+            font-weight: 700;
+            margin: 0;
+            color: var(--dark);
+            font-size: 1.6rem;
+        }
+        
+        .password-view-value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            font-family: 'Courier New', monospace;
+            padding: 1.5rem;
+            background: rgba(0, 0, 0, 0.03);
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 2rem;
+            border: 2px dashed rgba(0, 0, 0, 0.1);
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+            color: var(--dark);
+        }
+        
+        .password-view-countdown {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background: rgba(220, 53, 69, 0.1);
+            border-radius: 24px;
+            padding: 0.8rem 1.5rem;
+            width: fit-content;
+            margin: 0 auto;
+            font-size: 1.1rem;
+        }
+        
+        .password-view-countdown i {
+            color: var(--danger);
+            font-size: 1.2rem;
+        }
+        
+        .password-view-countdown span {
+            font-weight: 600;
+            color: var(--danger);
+        }
+        
+        .password-view-footer {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 1rem;
+            color: #6c757d;
+            font-weight: 500;
+        }
+        
+        .password-view-button {
+            display: flex;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+        
+        .btn-secure {
             background: var(--dark);
             color: white;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            font-size: 1.1rem;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-secure:hover {
+            background: #135e4f;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .security-item {
+            padding: 1.2rem;
+            background: rgba(249, 249, 249, 0.8);
+            border-radius: 12px;
+            margin-bottom: 1.2rem;
+            border-left: 4px solid var(--primary);
+            transition: all 0.3s ease;
+        }
+        
+        .security-item:hover {
+            transform: translateX(5px);
+            background: white;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+        
+        .security-item i {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-right: 15px;
+        }
+        
+        .header-gradient {
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+            margin-bottom: 2rem;
+        }
+        
+        .form-label {
+            font-weight: 600;
+            color: #2a2a2a;
+            margin-bottom: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            border: none;
+            padding: 0.8rem 1.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(90deg, #26a592, #e86e40);
+        }
+        
+        .last-login-container {
+            background: linear-gradient(135deg, rgba(44, 181, 160, 0.1), rgba(255, 127, 80, 0.05));
+            border-radius: 12px;
+            padding: 1.2rem;
+            margin-top: 0.5rem;
+        }
+        
+        .password-action-container {
+            background: linear-gradient(135deg, rgba(44, 181, 160, 0.1), rgba(44, 181, 160, 0.05));
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+        }
+        
+        .update-indicator {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background: var(--accent);
+            color: white;
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
-            width: 25px;
-            height: 25px;
-            display: inline-flex;
+            display: flex;
             align-items: center;
             justify-content: center;
             font-size: 0.8rem;
-            margin-left: 5px;
+            font-weight: bold;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .settings-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 2rem;
+        }
+        
+        .settings-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.8rem;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
         }
     </style>
 </head>
@@ -262,33 +502,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </ol>
         </nav>
 
-        <h3 class="text-primary mb-4"><i class="fas fa-user-md me-2"></i>Doctor Profile</h3>
+        <div class="settings-header">
+            <div class="settings-icon">
+                <i class="fas fa-user-md"></i>
+            </div>
+            <div>
+                <h1 class="header-gradient">Admin Profile Settings</h1>
+                <p class="text-muted">Manage your account details and security preferences</p>
+            </div>
+        </div>
 
         <?php if ($message): ?>
-            <div class="alert alert-info mb-4"><?= htmlspecialchars($message) ?></div>
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i> <?= htmlspecialchars($message) ?>
+            </div>
         <?php endif; ?>
 
         <div class="row g-4">
             <!-- Form Column -->
             <div class="col-lg-6">
-                <div class="settings-card p-4">
+                <div class="settings-card p-4 position-relative">
+                    <span class="update-indicator">!</span>
                     <form method="POST" id="settingsForm">
                         <div class="mb-4">
-                            <label class="form-label info-label">Full Name</label>
-                            <input type="text" class="form-control py-2" name="name" 
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control py-3" name="name" 
                                    value="<?= htmlspecialchars($admin['name']) ?>" required>
                         </div>
                         
                         <div class="mb-4">
-                            <label class="form-label info-label">Username</label>
-                            <input type="text" class="form-control py-2" name="username" 
+                            <label class="form-label">Username</label>
+                            <input type="text" class="form-control py-3" name="username" 
                                    value="<?= htmlspecialchars($admin['username']) ?>" required>
                         </div>
                         
                         <div class="mb-4">
-                            <label class="form-label info-label">New Password</label>
+                            <label class="form-label">New Password</label>
                             <div class="input-group">
-                                <input type="password" class="form-control py-2" name="password" id="newPassword">
+                                <input type="password" class="form-control py-3" name="password" id="newPassword" placeholder="Enter new password">
                                 <span class="input-group-text password-visibility-toggle" onclick="togglePasswordVisibility()">
                                     <i class="bi bi-eye-slash" id="toggleIcon"></i>
                                 </span>
@@ -300,7 +551,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         
                         <div class="password-rules">
-                            <h6 class="mb-2"><i class="fas fa-shield-alt me-2"></i>Password Requirements</h6>
+                            <h6><i class="fas fa-shield-alt me-2"></i>Password Requirements</h6>
                             <ul>
                                 <li>At least 8 characters</li>
                                 <li>Include uppercase and lowercase letters</li>
@@ -309,7 +560,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </ul>
                         </div>
 
-                        <button type="submit" class="btn btn-primary w-100 py-2 mt-3">
+                        <button type="submit" class="btn btn-primary w-100 py-3 mt-3">
                             <i class="fas fa-save me-2"></i>Update Profile
                         </button>
                     </form>
@@ -319,8 +570,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <!-- Info Column -->
             <div class="col-lg-6">
                 <div class="settings-card p-4 h-100">
-                    <div class="info-box h-100">
-                        <div class="d-flex flex-column gap-3">
+                    <div class="info-box">
+                        <div class="d-flex flex-column">
                             <div>
                                 <div class="info-label">Full Name</div>
                                 <div class="info-value"><?= htmlspecialchars($admin['name']) ?></div>
@@ -338,23 +589,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             
                             <div>
                                 <div class="info-label">Last Updated</div>
-                                <div class="info-value"><?= $admin['updated_at'] ? date('M j, Y g:i a', strtotime($admin['updated_at'])) : 'Never' ?></div>
-                            </div>
-                            
-                            <div>
-                                <div class="info-label" style="margin-bottom: 10px;">Last Login</div>
-                                <span class="badge-last-login"><?= $admin['last_login'] ? date('M j, Y g:i a', strtotime($admin['last_login'])) : 'Never' ?></span>
-                            </div>
-                            
-                            <div class="mt-3">
-                                <div class="info-label">Current Password</div>
-                                <div class="password-display">
-                                    <span id="passwordMask">••••••••</span>
-                                    <button type="button" class="view-button" id="viewPasswordBtn">
-                                        <i class="fas fa-eye me-1"></i> View Password
-                                    </button>
+                                <div class="info-value">
+                                    <?= $admin['updated_at'] ? date('M j, Y g:i a', strtotime($admin['updated_at'])) : 'Never' ?>
                                 </div>
-                                <small class="text-muted mt-1 d-block">Password will be hidden after <span id="countdown">59</span> seconds</small>
+                            </div>
+                            
+                            <div class="last-login-container">
+                                <div class="info-label">Last Login</div>
+                                <span class="badge-last-login">
+                                    <?= $admin['last_login'] ? date('M j, Y g:i a', strtotime($admin['last_login'])) : 'Never' ?>
+                                </span>
+                            </div>
+                            
+                            <div class="password-action-container mt-3">
+                                <div class="info-label">Password Access</div>
+                                <div class="d-flex justify-content-center mt-3">
+                                    <a href="?view_password=1" class="view-button">
+                                        <i class="fas fa-key me-1"></i> View Password
+                                    </a>
+                                </div>
+                                <small class="text-muted mt-2 d-block text-center">Click to view your password (visible for 60 seconds)</small>
                             </div>
                         </div>
                     </div>
@@ -362,54 +616,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
         
+        <!-- Password View Section -->
+        <?php if ($showPassword): ?>
+        <div class="security-section" id="passwordViewSection">
+            <div class="password-view-container">
+                <div class="password-view-wrapper">
+                    <div class="password-view-header">
+                        <div class="password-view-icon">
+                            <i class="fas fa-key"></i>
+                        </div>
+                        <h4 class="password-view-title">Your Password</h4>
+                    </div>
+                    
+                    <div class="password-view-value" id="passwordDisplay">
+                        <?= htmlspecialchars($admin['password_hash']) ?>
+                    </div>
+                    
+                    <div class="password-view-countdown">
+                        <i class="fas fa-clock"></i>
+                        <span>This password will be hidden in</span>
+                        <span id="passwordCountdown">60</span>
+                        <span>seconds</span>
+                    </div>
+                    
+                    <div class="password-view-button">
+                        <button class="btn btn-secure" onclick="location.href='settings.php'">
+                            <i class="fas fa-lock me-1"></i> Hide Password
+                        </button>
+                    </div>
+                    
+                    <div class="password-view-footer">
+                        <i class="fas fa-exclamation-triangle me-1 text-danger"></i>
+                        For security reasons, please do not share your password
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+        
         <!-- Security Section -->
-        <div class="security-section mt-4">
-            <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="security-section">
+            <div class="d-flex align-items-center gap-4 mb-4">
                 <div class="security-icon">
                     <i class="fas fa-shield-alt"></i>
                 </div>
                 <div>
-                    <h5 class="mb-0">Security Recommendations</h5>
-                    <p class="mb-0 text-muted">Keep your account secure with these tips</p>
+                    <h3 class="mb-1">Security Recommendations</h3>
+                    <p class="mb-0 text-muted">Best practices to keep your account secure</p>
                 </div>
             </div>
             
-            <div class="row mt-3">
+            <div class="row mt-4">
                 <div class="col-md-6">
-                    <div class="d-flex align-items-start gap-3 mb-3">
-                        <i class="fas fa-sync-alt text-primary mt-1"></i>
+                    <div class="security-item d-flex align-items-center">
+                        <i class="fas fa-sync-alt"></i>
                         <div>
-                            <h6 class="mb-1">Regular Password Updates</h6>
+                            <h5 class="mb-1">Regular Password Updates</h5>
                             <p class="mb-0 small text-muted">Change your password every 60-90 days to maintain security.</p>
                         </div>
                     </div>
                 </div>
                 
                 <div class="col-md-6">
-                    <div class="d-flex align-items-start gap-3 mb-3">
-                        <i class="fas fa-lock text-primary mt-1"></i>
+                    <div class="security-item d-flex align-items-center">
+                        <i class="fas fa-lock"></i>
                         <div>
-                            <h6 class="mb-1">Strong Passwords</h6>
+                            <h5 class="mb-1">Strong Passwords</h5>
                             <p class="mb-0 small text-muted">Use a combination of letters, numbers, and special characters.</p>
                         </div>
                     </div>
                 </div>
                 
                 <div class="col-md-6">
-                    <div class="d-flex align-items-start gap-3 mb-3">
-                        <i class="fas fa-user-shield text-primary mt-1"></i>
+                    <div class="security-item d-flex align-items-center">
+                        <i class="fas fa-user-shield"></i>
                         <div>
-                            <h6 class="mb-1">Account Monitoring</h6>
-                            <p class="mb-0 small text-muted">Regularly check your login history for any suspicious activity.</p>
+                            <h5 class="mb-1">Account Monitoring</h5>
+                            <p class="mb-0 small text-muted">Regularly check your login history for suspicious activity.</p>
                         </div>
                     </div>
                 </div>
                 
                 <div class="col-md-6">
-                    <div class="d-flex align-items-start gap-3 mb-3">
-                        <i class="fas fa-sign-out-alt text-primary mt-1"></i>
+                    <div class="security-item d-flex align-items-center">
+                        <i class="fas fa-sign-out-alt"></i>
                         <div>
-                            <h6 class="mb-1">Logout When Finished</h6>
+                            <h5 class="mb-1">Logout When Finished</h5>
                             <p class="mb-0 small text-muted">Always log out after your session, especially on shared devices.</p>
                         </div>
                     </div>
@@ -418,9 +710,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- Hidden field to store the actual password -->
-    <input type="hidden" id="actualPassword" value="<?= htmlspecialchars($admin['password_hash']) ?>">
-    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
     <script>
@@ -456,57 +745,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         });
         
-        // View password functionality
-        document.getElementById('viewPasswordBtn').addEventListener('click', function() {
-            const passwordMask = document.getElementById('passwordMask');
-            const actualPassword = document.getElementById('actualPassword').value;
-            const button = this;
-            const countdownElement = document.getElementById('countdown');
-            
-            if (!actualPassword) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'No Password Set',
-                    text: 'There is no password currently set for this account',
-                    confirmButtonColor: '#2cb5a0'
-                });
-                return;
-            }
-            
-            // Show the actual password
-            passwordMask.textContent = actualPassword;
-            
-            // Change button text and disable it
-            button.innerHTML = '<i class="fas fa-eye-slash me-1"></i> Hide Password';
-            button.disabled = true;
-            
-            // Start countdown
-            let seconds = 59;
-            countdownElement.textContent = seconds;
-            
-            const countdown = setInterval(() => {
-                seconds--;
-                countdownElement.textContent = seconds;
-                
-                if (seconds <= 0) {
-                    clearInterval(countdown);
-                    passwordMask.textContent = '••••••••';
-                    button.innerHTML = '<i class="fas fa-eye me-1"></i> View Password';
-                    button.disabled = false;
-                    countdownElement.textContent = '59';
-                    
-                    // Show notification
-                    Swal.fire({
-                        icon: 'info',
-                        title: 'Password Hidden',
-                        text: 'Your password has been automatically hidden',
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
-                }
-            }, 1000);
-        });
-        
         // Form submission validation
         document.getElementById('settingsForm').addEventListener('submit', function(e) {
             const password = document.getElementById('newPassword').value;
@@ -517,11 +755,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     icon: 'warning',
                     title: 'Weak Password',
                     text: 'Password must be at least 8 characters long',
-                    confirmButtonColor: '#2cb5a0'
+                    confirmButtonColor: '#2cb5a0',
+                    confirmButtonText: 'OK'
                 });
             }
         });
+        
+        // Password view countdown
+        <?php if ($showPassword): ?>
+        let seconds = 60;
+        const countdownElement = document.getElementById('passwordCountdown');
+        
+        const countdown = setInterval(() => {
+            seconds--;
+            countdownElement.textContent = seconds;
+            
+            if (seconds <= 0) {
+                clearInterval(countdown);
+                // Redirect to secure page after countdown
+                setTimeout(() => {
+                    window.location.href = 'settings.php';
+                }, 1000);
+            }
+        }, 1000);
+        <?php endif; ?>
     </script>
-
 </body>
 </html>
