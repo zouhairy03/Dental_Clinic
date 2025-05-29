@@ -56,12 +56,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-bootstrap-4/bootstrap-4.css">
 
     <style>
         :root {
             --primary: #2cb5a0;
             --secondary: #f0f7fa;
             --accent: #ff7f50;
+            --dark: #1a7c6c;
         }
 
         body {
@@ -129,6 +131,124 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: var(--primary);
             border-radius: 12px;
         }
+        
+        .password-display {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+            background: rgba(0,0,0,0.05);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .password-toggle {
+            cursor: pointer;
+            color: var(--primary);
+            transition: all 0.3s ease;
+        }
+        
+        .password-toggle:hover {
+            color: var(--dark);
+            transform: scale(1.1);
+        }
+        
+        .view-button {
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.4rem 1rem;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .view-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        
+        .password-strength {
+            height: 6px;
+            border-radius: 3px;
+            margin-top: 0.5rem;
+            background: #e9ecef;
+            overflow: hidden;
+        }
+        
+        .strength-meter {
+            height: 100%;
+            width: 0;
+            transition: width 0.5s ease;
+        }
+        
+        .password-rules {
+            background: rgba(44,181,160,0.1);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-left: 3px solid var(--primary);
+        }
+        
+        .password-rules ul {
+            margin-bottom: 0;
+            padding-left: 1.5rem;
+        }
+        
+        .password-rules li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .password-rules li:last-child {
+            margin-bottom: 0;
+        }
+        
+        .security-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(44,181,160,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+        
+        .security-section {
+            background: rgba(255,255,255,0.9);
+            border-radius: 15px;
+            padding: 1.5rem;
+            border: 1px solid rgba(44,181,160,0.1);
+            margin-top: 2rem;
+        }
+        
+        .password-visibility-toggle {
+            cursor: pointer;
+            color: #6c757d;
+            transition: color 0.3s;
+        }
+        
+        .password-visibility-toggle:hover {
+            color: var(--primary);
+        }
+        
+        .countdown-badge {
+            background: var(--dark);
+            color: white;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            margin-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -152,7 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <!-- Form Column -->
             <div class="col-lg-6">
                 <div class="settings-card p-4">
-                    <form method="POST">
+                    <form method="POST" id="settingsForm">
                         <div class="mb-4">
                             <label class="form-label info-label">Full Name</label>
                             <input type="text" class="form-control py-2" name="name" 
@@ -166,17 +286,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         
                         <div class="mb-4">
-    <label class="form-label info-label">New Password</label>
-    <div class="input-group">
-        <input type="password" class="form-control py-2" name="password" id="newPassword">
-        <span class="input-group-text" onclick="togglePasswordVisibility()">
-            <i class="bi bi-eye-slash" id="toggleIcon"></i>
-        </span>
-    </div>
-    <small class="text-muted">Leave blank to keep current password</small>
-</div>
+                            <label class="form-label info-label">New Password</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control py-2" name="password" id="newPassword">
+                                <span class="input-group-text password-visibility-toggle" onclick="togglePasswordVisibility()">
+                                    <i class="bi bi-eye-slash" id="toggleIcon"></i>
+                                </span>
+                            </div>
+                            <div class="password-strength">
+                                <div class="strength-meter" id="passwordStrength"></div>
+                            </div>
+                            <small class="text-muted">Leave blank to keep current password</small>
+                        </div>
+                        
+                        <div class="password-rules">
+                            <h6 class="mb-2"><i class="fas fa-shield-alt me-2"></i>Password Requirements</h6>
+                            <ul>
+                                <li>At least 8 characters</li>
+                                <li>Include uppercase and lowercase letters</li>
+                                <li>Include at least one number</li>
+                                <li>Include a special character (e.g., !@#$%)</li>
+                            </ul>
+                        </div>
 
-                        <button type="submit" class="btn btn-primary w-100 py-2">
+                        <button type="submit" class="btn btn-primary w-100 py-2 mt-3">
                             <i class="fas fa-save me-2"></i>Update Profile
                         </button>
                     </form>
@@ -200,19 +333,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             
                             <div>
                                 <div class="info-label">Account Created</div>
-                                <div class="info-value"><?= $admin['created_at'] ?></div>
+                                <div class="info-value"><?= date('M j, Y g:i a', strtotime($admin['created_at'])) ?></div>
                             </div>
                             
                             <div>
                                 <div class="info-label">Last Updated</div>
-                                <div class="info-value"><?= $admin['updated_at'] ?? 'Never' ?></div>
+                                <div class="info-value"><?= $admin['updated_at'] ? date('M j, Y g:i a', strtotime($admin['updated_at'])) : 'Never' ?></div>
                             </div>
                             
                             <div>
                                 <div class="info-label" style="margin-bottom: 10px;">Last Login</div>
-
-                                <span class="badge-last-login"><?= $admin['last_login'] ?? 'Never' ?></span>
+                                <span class="badge-last-login"><?= $admin['last_login'] ? date('M j, Y g:i a', strtotime($admin['last_login'])) : 'Never' ?></span>
                             </div>
+                            
+                            <div class="mt-3">
+                                <div class="info-label">Current Password</div>
+                                <div class="password-display">
+                                    <span id="passwordMask">••••••••</span>
+                                    <button type="button" class="view-button" id="viewPasswordBtn">
+                                        <i class="fas fa-eye me-1"></i> View Password
+                                    </button>
+                                </div>
+                                <small class="text-muted mt-1 d-block">Password will be hidden after <span id="countdown">59</span> seconds</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Security Section -->
+        <div class="security-section mt-4">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="security-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0">Security Recommendations</h5>
+                    <p class="mb-0 text-muted">Keep your account secure with these tips</p>
+                </div>
+            </div>
+            
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <div class="d-flex align-items-start gap-3 mb-3">
+                        <i class="fas fa-sync-alt text-primary mt-1"></i>
+                        <div>
+                            <h6 class="mb-1">Regular Password Updates</h6>
+                            <p class="mb-0 small text-muted">Change your password every 60-90 days to maintain security.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="d-flex align-items-start gap-3 mb-3">
+                        <i class="fas fa-lock text-primary mt-1"></i>
+                        <div>
+                            <h6 class="mb-1">Strong Passwords</h6>
+                            <p class="mb-0 small text-muted">Use a combination of letters, numbers, and special characters.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="d-flex align-items-start gap-3 mb-3">
+                        <i class="fas fa-user-shield text-primary mt-1"></i>
+                        <div>
+                            <h6 class="mb-1">Account Monitoring</h6>
+                            <p class="mb-0 small text-muted">Regularly check your login history for any suspicious activity.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="d-flex align-items-start gap-3 mb-3">
+                        <i class="fas fa-sign-out-alt text-primary mt-1"></i>
+                        <div>
+                            <h6 class="mb-1">Logout When Finished</h6>
+                            <p class="mb-0 small text-muted">Always log out after your session, especially on shared devices.</p>
                         </div>
                     </div>
                 </div>
@@ -220,17 +418,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
+    <!-- Hidden field to store the actual password -->
+    <input type="hidden" id="actualPassword" value="<?= htmlspecialchars($admin['password_hash']) ?>">
+    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
     <script>
-function togglePasswordVisibility() {
-    const passwordInput = document.getElementById('newPassword');
-    const icon = document.getElementById('toggleIcon');
-    const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-    passwordInput.setAttribute('type', type);
-    icon.classList.toggle('bi-eye');
-    icon.classList.toggle('bi-eye-slash');
-}
-</script>
+        // Password visibility toggle for form field
+        function togglePasswordVisibility() {
+            const passwordInput = document.getElementById('newPassword');
+            const icon = document.getElementById('toggleIcon');
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            icon.classList.toggle('bi-eye');
+            icon.classList.toggle('bi-eye-slash');
+        }
+        
+        // Password strength indicator
+        document.getElementById('newPassword').addEventListener('input', function() {
+            const password = this.value;
+            const strengthBar = document.getElementById('passwordStrength');
+            let strength = 0;
+            
+            if (password.length > 7) strength += 25;
+            if (/[A-Z]/.test(password)) strength += 25;
+            if (/[0-9]/.test(password)) strength += 25;
+            if (/[^A-Za-z0-9]/.test(password)) strength += 25;
+            
+            strengthBar.style.width = strength + '%';
+            
+            if (strength < 50) {
+                strengthBar.style.backgroundColor = '#dc3545';
+            } else if (strength < 75) {
+                strengthBar.style.backgroundColor = '#ffc107';
+            } else {
+                strengthBar.style.backgroundColor = '#28a745';
+            }
+        });
+        
+        // View password functionality
+        document.getElementById('viewPasswordBtn').addEventListener('click', function() {
+            const passwordMask = document.getElementById('passwordMask');
+            const actualPassword = document.getElementById('actualPassword').value;
+            const button = this;
+            const countdownElement = document.getElementById('countdown');
+            
+            if (!actualPassword) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No Password Set',
+                    text: 'There is no password currently set for this account',
+                    confirmButtonColor: '#2cb5a0'
+                });
+                return;
+            }
+            
+            // Show the actual password
+            passwordMask.textContent = actualPassword;
+            
+            // Change button text and disable it
+            button.innerHTML = '<i class="fas fa-eye-slash me-1"></i> Hide Password';
+            button.disabled = true;
+            
+            // Start countdown
+            let seconds = 59;
+            countdownElement.textContent = seconds;
+            
+            const countdown = setInterval(() => {
+                seconds--;
+                countdownElement.textContent = seconds;
+                
+                if (seconds <= 0) {
+                    clearInterval(countdown);
+                    passwordMask.textContent = '••••••••';
+                    button.innerHTML = '<i class="fas fa-eye me-1"></i> View Password';
+                    button.disabled = false;
+                    countdownElement.textContent = '59';
+                    
+                    // Show notification
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Password Hidden',
+                        text: 'Your password has been automatically hidden',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                }
+            }, 1000);
+        });
+        
+        // Form submission validation
+        document.getElementById('settingsForm').addEventListener('submit', function(e) {
+            const password = document.getElementById('newPassword').value;
+            
+            if (password && password.length < 8) {
+                e.preventDefault();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Weak Password',
+                    text: 'Password must be at least 8 characters long',
+                    confirmButtonColor: '#2cb5a0'
+                });
+            }
+        });
+    </script>
 
 </body>
 </html>

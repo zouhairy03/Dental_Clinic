@@ -1,42 +1,132 @@
 <?php
-require_once 'config.php'; // contains DB and session setup
+session_start();
+require_once 'config.php'; // contains $pdo setup and session config
+
+// Security headers
+header('X-Frame-Options: DENY');
+header('X-XSS-Protection: 1; mode=block');
+header('X-Content-Type-Options: nosniff');
 
 // Generate CSRF token
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-$error = '';
+// Initialize login attempts tracking
+if (!isset($_SESSION['login_attempts'])) {
+    $_SESSION['login_attempts'] = 0;
+    $_SESSION['last_attempt_time'] = time();
+}
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Check CSRF token
+$error = '';
+$login_disabled = false;
+
+// Check if user is temporarily locked out
+if ($_SESSION['login_attempts'] >= 5) {
+    $lockout_duration = 300; // 5 minutes
+    $elapsed_time = time() - $_SESSION['last_attempt_time'];
+    
+    if ($elapsed_time < $lockout_duration) {
+        $remaining_time = $lockout_duration - $elapsed_time;
+        $error = "Too many failed attempts. Please try again in $remaining_time seconds.";
+        $login_disabled = true;
+    } else {
+        // Reset attempts if lockout period has passed
+        $_SESSION['login_attempts'] = 0;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$login_disabled) {
+    // Verify CSRF token
     $csrf_token = $_POST['csrf_token'] ?? '';
     if (!hash_equals($_SESSION['csrf_token'], $csrf_token)) {
         $error = 'Invalid CSRF token. Please refresh the page and try again.';
     } else {
-        $username = trim($_POST['username'] ?? '');
-        $password = trim($_POST['password'] ?? '');
+        // Sanitize inputs
+      // Sanitize inputs
+$username = trim($_POST['username'] ?? '');
+$username = htmlspecialchars($username, ENT_QUOTES, 'UTF-8');
+
+$password = trim($_POST['password'] ?? '');
 
         if ($username && $password) {
-            $stmt = $pdo->prepare("SELECT * FROM admins WHERE username = ? AND password_hash = ?");
-            $stmt->execute([$username, $password]);
+            // Fetch admin by username
+            $stmt = $pdo->prepare("SELECT * FROM admins WHERE username = ?");
+            $stmt->execute([$username]);
             $admin = $stmt->fetch();
 
             if ($admin) {
-                $_SESSION['admin_id'] = $admin['id'];
-                $_SESSION['admin_name'] = $admin['name'];
+                // Password verification logic
+                $valid_password = false;
+                
+                // Check if stored password is plaintext (to be migrated to hash)
+                if ($admin['password_hash'] === $password) {
+                    $valid_password = true;
+                    
+                    // Migrate to hashed password
+                    $new_hash = password_hash($password, PASSWORD_DEFAULT);
+                    $updateStmt = $pdo->prepare("UPDATE admins SET password_hash = ? WHERE id = ?");
+                    $updateStmt->execute([$new_hash, $admin['id']]);
+                } 
+                // Check hashed password
+                else if (password_verify($password, $admin['password_hash'])) {
+                    $valid_password = true;
+                }
 
-                // Update last_login
-                $updateStmt = $pdo->prepare("UPDATE admins SET last_login = NOW() WHERE id = ?");
-                $updateStmt->execute([$admin['id']]);
-
-                // Regenerate token for future forms
-                unset($_SESSION['csrf_token']);
-
-                header("Location: dashboard.php");
-                exit;
+                if ($valid_password) {
+                    // Successful login
+                    $_SESSION['admin_id'] = $admin['id'];
+                    $_SESSION['admin_name'] = $admin['name'];
+                    
+                    // Reset login attempts
+                    $_SESSION['login_attempts'] = 0;
+                    
+                    // Update last login
+                    $updateStmt = $pdo->prepare("UPDATE admins SET last_login = NOW() WHERE id = ?");
+                    $updateStmt->execute([$admin['id']]);
+                    
+                    // Audit log
+                    $log = sprintf(
+                        "Successful login: %s [%s] from %s",
+                        $username,
+                        date('Y-m-d H:i:s'),
+                        $_SERVER['REMOTE_ADDR']
+                    );
+                    file_put_contents('auth.log', $log.PHP_EOL, FILE_APPEND);
+                    
+                    // Regenerate CSRF token for next request
+                    unset($_SESSION['csrf_token']);
+                    
+                    header("Location: dashboard.php");
+                    exit;
+                } else {
+                    // Failed login
+                    $_SESSION['login_attempts']++;
+                    $_SESSION['last_attempt_time'] = time();
+                    
+                    $remaining_attempts = 5 - $_SESSION['login_attempts'];
+                    $error = $remaining_attempts > 0 
+                        ? "Invalid credentials. $remaining_attempts attempts remaining." 
+                        : "Too many failed attempts. Account locked for 5 minutes.";
+                    
+                    // Audit log
+                    $log = sprintf(
+                        "Failed login: %s [%s] from %s",
+                        $username,
+                        date('Y-m-d H:i:s'),
+                        $_SERVER['REMOTE_ADDR']
+                    );
+                    file_put_contents('auth.log', $log.PHP_EOL, FILE_APPEND);
+                    
+                    // Add delay to slow down brute force attacks
+                    sleep(2);
+                }
             } else {
-                $error = 'Invalid username or password.';
+                // Admin not found - but don't reveal that
+                $_SESSION['login_attempts']++;
+                $_SESSION['last_attempt_time'] = time();
+                $error = "Invalid credentials";
+                sleep(2); // Same delay as failed login
             }
         } else {
             $error = 'Please fill in both fields.';
@@ -48,65 +138,152 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Access - DentalCare</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
             --primary: #2cb5a0;
+            --primary-dark: #229384;
             --secondary: #f0f7fa;
             --accent: #ff7f50;
+            --danger: #dc3545;
+            --success: #28a745;
         }
 
         body {
             font-family: 'Poppins', sans-serif;
-            background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="%232cb5a033" d="M44.6,-58.1C56.3,-49.6,62.6,-33.3,66.1,-16.8C69.6,-0.3,70.4,16.5,63.9,29.1C57.4,41.7,43.7,50.2,29.9,56.9C16.1,63.6,2.2,68.5,-12.6,67.7C-27.4,66.8,-42.9,60.2,-55.4,50.3C-67.9,40.4,-77.3,27.2,-79.9,12.6C-82.5,-2.1,-78.3,-18.2,-69.3,-31.1C-60.3,-44,-46.5,-53.7,-32.3,-61.3C-18.1,-68.9,-3.5,-74.4,12.1,-71.3C27.7,-68.2,55.4,-56.5,62.7,-42.5C70,-28.5,57,-12.3,53.9,2.1C50.8,16.5,57.6,33,55.9,47.8C54.2,62.6,44,75.7,31.8,81.8C19.6,87.9,5.3,87.1,-8.2,84.1C-21.7,81.2,-35.3,76.1,-45.6,67.3C-55.9,58.4,-62.8,45.8,-68.9,33.3C-75,20.8,-80.3,8.4,-79.8,-3.7C-79.3,-15.8,-73,-31.6,-63.3,-44.5C-53.6,-57.4,-40.5,-67.4,-26.6,-74.3C-12.7,-81.1,2,-84.8,16.4,-83.3C30.8,-81.8,45.1,-75,56.8,-65.3C68.5,-55.5,77.7,-42.7,81.2,-28.6C84.7,-14.5,82.5,0.9,76.5,13.4C70.5,25.8,60.7,35.3,49.9,44.3C39.1,53.3,27.3,61.8,14.1,64.3C0.9,66.8,-13.6,63.4,-25.4,57.5C-37.2,51.6,-46.3,43.3,-54.3,34.1C-62.3,24.9,-69.2,14.8,-71.7,3.3C-74.3,-8.3,-72.5,-21.3,-66.3,-32.2C-60.1,-43.1,-49.5,-51.9,-37.8,-60.3C-26.1,-68.7,-13,-76.6,1.1,-78.6C15.2,-80.6,30.5,-76.7,44.6,-58.1Z"/></svg>'),
-                        linear-gradient(160deg, #f8f9fa 0%, #e3f2fd 100%);
-            background-size: cover;
+            background: linear-gradient(135deg, #e0f7fa 0%, #f8f9fa 100%);
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 10% 20%, rgba(44, 181, 160, 0.1) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(44, 181, 160, 0.1) 0%, transparent 20%);
+            z-index: -1;
+        }
+
+        .login-container {
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
         .login-card {
-            background: rgba(255,255,255,0.9);
-            border: 1px solid rgba(44,181,160,0.15);
+            background: rgba(255, 255, 255, 0.95);
             border-radius: 20px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            max-width: 400px;
-            padding: 2rem;
-            animation: cardEntrance 0.6s ease-out;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            min-height: 600px;
+            animation: fadeIn 0.8s ease-out;
         }
 
-        @keyframes cardEntrance {
-            from { opacity: 0; transform: translateY(20px) scale(0.95); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .graphic-side {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 3rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .graphic-side::before {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 20%),
+                radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 25%);
+            transform: rotate(30deg);
+        }
+
+        .dental-icon {
+            font-size: 5rem;
+            margin-bottom: 2rem;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .form-side {
+            padding: 3rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         .auth-header {
-            position: relative;
-            margin-bottom: 2rem;
+            text-align: center;
+            margin-bottom: 2.5rem;
         }
 
-        .eyelash-icon {
-            font-size: 3rem;
+        .logo {
             color: var(--primary);
-            animation: float 3s ease-in-out infinite;
+            font-weight: 700;
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
         }
 
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
+        .logo i {
+            margin-right: 10px;
+        }
+
+        .security-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 1.5rem;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .security-indicator i {
+            margin-right: 8px;
+            color: var(--success);
         }
 
         .form-control {
             border-radius: 12px;
-            padding: 0.8rem 1.2rem;
+            padding: 1rem 1.2rem;
             border: 2px solid #e9ecef;
+            font-size: 1rem;
+            transition: all 0.3s;
         }
 
         .form-control:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 0.25rem rgba(44,181,160,0.25);
+            box-shadow: 0 0 0 0.25rem rgba(44, 181, 160, 0.25);
+        }
+
+        .password-container {
+            position: relative;
         }
 
         .password-toggle {
@@ -116,70 +293,213 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transform: translateY(-50%);
             cursor: pointer;
             color: #6c757d;
+            background: none;
+            border: none;
         }
 
         .btn-login {
             background: var(--primary);
             border: none;
+            border-radius: 12px;
             padding: 1rem;
-            font-weight: 500;
+            font-weight: 600;
+            font-size: 1.1rem;
+            letter-spacing: 0.5px;
             transition: all 0.3s ease;
+            height: 55px;
         }
 
         .btn-login:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(44,181,160,0.3);
+            background: var(--primary-dark);
+            transform: translateY(-3px);
+            box-shadow: 0 7px 14px rgba(44, 181, 160, 0.3);
         }
 
-        .alert-danger {
-            background: rgba(220,53,69,0.1);
-            border: 2px solid #dc3545;
-            color: #dc3545;
+        .btn-login:active {
+            transform: translateY(-1px);
+        }
+
+        .btn-login:disabled {
+            background: #cccccc;
+            transform: none;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .alert {
             border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .password-rules {
+            background: var(--secondary);
+            border-radius: 12px;
+            padding: 1.2rem;
+            margin-top: 1.5rem;
+            border-left: 4px solid var(--primary);
+        }
+
+        .password-rules h6 {
+            color: var(--primary);
+            margin-bottom: 0.8rem;
+        }
+
+        .password-rules ul {
+            margin-bottom: 0;
+            padding-left: 1.5rem;
+        }
+
+        .password-rules li {
+            margin-bottom: 0.4rem;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 2rem;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .tooth-animation {
+            position: absolute;
+            opacity: 0.2;
+            font-size: 8rem;
+            z-index: 0;
+        }
+
+        .tooth-1 {
+            top: 10%;
+            left: 15%;
+            animation: float 8s infinite ease-in-out;
+        }
+
+        .tooth-2 {
+            bottom: 10%;
+            right: 15%;
+            animation: float 10s infinite ease-in-out;
+            animation-delay: 2s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+        }
+
+        .attempts-warning {
+            color: var(--danger);
+            font-weight: 500;
+            text-align: center;
+            margin-top: 1rem;
         }
     </style>
 </head>
-<body class="d-flex align-items-center">
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-md-10">
-                <div class="login-card mx-auto">
-                    <div class="auth-header text-center mb-4">
-                        <i class="fas fa-eye eyelash-icon mb-3"></i>
-                        <h2 class="text-primary">Clinic Portal</h2>
-                        <p class="text-muted">Secure Practitioner Access</p>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="graphic-side col-md-6 d-none d-md-flex">
+                <i class="fas fa-tooth tooth-animation tooth-1"></i>
+                <i class="fas fa-tooth tooth-animation tooth-2"></i>
+                <div class="text-center position-relative" style="z-index: 1;">
+                    <i class="fas fa-tooth dental-icon"></i>
+                    <h1 class="mb-3">DentalCare Clinic</h1>
+                    <p class="lead">Secure practitioner access to patient management system</p>
+                    <div class="mt-5">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-shield-alt fa-2x me-3"></i>
+                            <div>
+                                <h5>End-to-End Encryption</h5>
+                                <p class="mb-0">All data is securely encrypted</p>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="fas fa-user-lock fa-2x me-3"></i>
+                            <div>
+                                <h5>Role-Based Access</h5>
+                                <p class="mb-0">Strict permission controls</p>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-history fa-2x me-3"></i>
+                            <div>
+                                <h5>Activity Auditing</h5>
+                                <p class="mb-0">All actions are logged</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="form-side col-md-6">
+                <div class="auth-header">
+                    <div class="logo">
+                        <i class="fas fa-tooth"></i>DentalCare
+                    </div>
+                    <h2>Secure Practitioner Login</h2>
+                    <p>Enter your credentials to access the clinic portal</p>
+                </div>
+
+                <?php if ($error): ?>
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i><?= htmlspecialchars($error) ?>
+                    </div>
+                <?php endif; ?>
+
+                <form method="POST" autocomplete="off">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                    
+                    <div class="mb-4">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" name="username" id="username" class="form-control" 
+                               placeholder="Enter your username" required autofocus
+                               <?= $login_disabled ? 'readonly' : '' ?>>
                     </div>
 
-                    <?php if ($error): ?>
-                        <div class="alert alert-danger mb-4"><?= htmlspecialchars($error) ?></div>
-                    <?php endif; ?>
-
-                    <form method="POST">
-                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-                        
-                        <div class="mb-4 position-relative">
-                            <label for="username" class="form-label">Username</label>
-                            <input type="text" name="username" id="username" class="form-control" 
-                                   placeholder="Enter your username" required autofocus>
-                        </div>
-
-                        <div class="mb-4 position-relative">
-                            <label for="password" class="form-label">Password</label>
+                    <div class="mb-4">
+                        <label for="password" class="form-label">Password</label>
+                        <div class="password-container">
                             <input type="password" name="password" id="password" class="form-control" 
-                                   placeholder="••••••••" required>
-                            <i class="fas fa-eye-slash password-toggle" onclick="togglePassword()"></i>
-                        </div>
-
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-login btn-primary text-white">
-                                <i class="fas fa-unlock-alt me-2"></i>Authenticate
+                                   placeholder="••••••••" required autocomplete="current-password"
+                                   <?= $login_disabled ? 'readonly' : '' ?>>
+                            <button type="button" class="password-toggle" onclick="togglePassword()">
+                                <i class="fas fa-eye-slash"></i>
                             </button>
                         </div>
-                    </form>
-
-                    <div class="text-center mt-4">
-                        <small class="text-muted">&copy; <?= date('Y') ?> DentalCare • Protected Access</small>
                     </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-login text-white" 
+                                <?= $login_disabled ? 'disabled' : '' ?>>
+                            <i class="fas fa-lock-open me-2"></i>Authenticate Securely
+                        </button>
+                    </div>
+                </form>
+
+                <div class="password-rules">
+                    <h6><i class="fas fa-shield-alt me-2"></i>Password Security Requirements</h6>
+                    <ul>
+                        <li>Minimum 12 characters in length</li>
+                        <li>At least one uppercase letter</li>
+                        <li>At least one number and special character</li>
+                        <li>Changed every 90 days</li>
+                    </ul>
+                </div>
+
+                <div class="security-indicator">
+                    <i class="fas fa-lock"></i>
+                    <span>Secure TLS Encrypted Connection</span>
+                </div>
+
+                <div class="footer">
+                    <p class="mb-1">&copy; <?= date('Y') ?> DentalCare Clinic. All rights reserved.</p>
+                    <p class="mb-0">
+                        <!-- <a href="forgot-password.php" class="text-decoration-none text-primary">
+                            <i class="fas fa-key me-1"></i>Forgot Password?
+                        </a>  -->
+
+                        <a href="#" class="text-decoration-none text-primary">
+                            <i class="fas fa-headset me-1"></i>Support
+                        </a>
+                    </p>
                 </div>
             </div>
         </div>
@@ -188,7 +508,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script>
         function togglePassword() {
             const passwordField = document.getElementById('password');
-            const toggleIcon = document.querySelector('.password-toggle');
+            const toggleIcon = document.querySelector('.password-toggle i');
             
             if (passwordField.type === 'password') {
                 passwordField.type = 'text';
@@ -198,6 +518,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 toggleIcon.classList.replace('fa-eye', 'fa-eye-slash');
             }
         }
+        
+        // Add animation to input fields on focus
+        document.querySelectorAll('.form-control').forEach(input => {
+            input.addEventListener('focus', function() {
+                this.parentElement.classList.add('focused');
+            });
+            
+            input.addEventListener('blur', function() {
+                this.parentElement.classList.remove('focused');
+            });
+        });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

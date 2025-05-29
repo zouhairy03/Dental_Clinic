@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:8889
--- Generation Time: May 27, 2025 at 11:36 PM
+-- Generation Time: May 29, 2025 at 12:10 AM
 -- Server version: 8.0.40
 -- PHP Version: 8.3.14
 
@@ -42,7 +42,7 @@ CREATE TABLE `admins` (
 --
 
 INSERT INTO `admins` (`id`, `username`, `password_hash`, `name`, `created_at`, `last_login`, `updated_at`) VALUES
-(1, 'zouhair', 'zizou', 'zouhair youssef', '2025-05-26 16:47:20', '2025-05-28 00:32:07', '2025-05-26 23:03:42'),
+(1, 'zouhair', '$2y$10$Yd0XNvSW/DjDv1fR9I4tAOdyg9wJRaeJIcGvPMhZztIDaAaS/vnvO', 'zouhair youssef', '2025-05-26 16:47:20', '2025-05-29 01:08:53', '2025-05-28 21:15:20'),
 (2, 'admin2', 'hash2', 'Jane Smith', '2025-05-26 16:47:20', NULL, NULL),
 (3, 'admin3', 'hash3', 'Emily Davis', '2025-05-26 16:47:20', NULL, NULL),
 (4, 'admin4', 'hash4', 'Michael Johnson', '2025-05-26 16:47:20', NULL, NULL),
@@ -75,18 +75,18 @@ CREATE TABLE `appointments` (
 --
 
 INSERT INTO `appointments` (`id`, `patient_id`, `dentist_id`, `appointment_date`, `appointment_time`, `treatment_type`, `status`, `notes`) VALUES
-(1, 1, 1, '2025-06-01', '10:00:00', 'Cleaning', 'cancelled', 'Regular cleaning.'),
-(2, 2, 2, '2025-06-02', '11:30:00', 'Filling', 'scheduled', 'Minor cavity.'),
-(3, 3, 3, '2025-06-03', '09:45:00', 'Root Canal', 'scheduled', 'Tooth sensitivity.'),
 (4, 4, 4, '2025-06-04', '14:00:00', 'Whitening', 'scheduled', 'Patient request.'),
-(5, 5, 5, '2025-06-05', '15:30:00', 'Checkup', 'scheduled', 'Routine check.'),
 (6, 6, 6, '2025-06-06', '08:15:00', 'Extraction', 'scheduled', 'Impacted wisdom tooth.'),
 (7, 7, 7, '2025-06-07', '13:00:00', 'Braces Adjustment', 'scheduled', 'Monthly adjustment.'),
 (8, 8, 8, '2025-06-08', '16:45:00', 'Filling', 'scheduled', 'Cavity reported.'),
 (9, 9, 9, '2025-06-09', '10:30:00', 'Cleaning', 'scheduled', 'Tartar buildup.'),
 (10, 10, 10, '2025-06-10', '12:00:00', 'Crown', 'scheduled', 'Broken molar.'),
-(11, 11, NULL, '2025-05-27', '12:40:00', 'remove cavity', 'scheduled', 'the patient already has cavity for second time'),
-(12, 7, NULL, '2025-05-27', '10:40:00', 'test', 'scheduled', 'hshsf');
+(12, 7, NULL, '2025-09-27', '14:40:00', 'test', 'completed', 'test2\r\n'),
+(14, 3, NULL, '2025-05-28', '11:40:00', 'test', 'cancelled', 'test'),
+(15, 6, NULL, '2025-05-29', '13:40:00', 'good', 'completed', 'test'),
+(16, 8, NULL, '2025-05-01', '12:30:00', 'test', 'completed', 'ggdgd'),
+(17, 11, NULL, '2025-05-29', '03:50:00', 'goo', 'scheduled', 'hello world'),
+(18, 14, NULL, '2025-05-29', '00:30:00', 'good', 'scheduled', 'GOOD');
 
 -- --------------------------------------------------------
 
@@ -137,8 +137,6 @@ CREATE TABLE `patients` (
 --
 
 INSERT INTO `patients` (`id`, `full_name`, `phone`, `working_type`, `created_at`, `age`) VALUES
-(1, 'Alice Cooper', '1234567890', 'employed', '2025-05-26 16:47:20', 29),
-(2, 'Bob Marley', '0987654321', 'student', '2025-05-26 16:47:20', 22),
 (3, 'Charlie Puth', '5551234567', 'unemployed', '2025-05-26 16:47:20', 35),
 (4, 'Diana Ross', '7778889999', 'self-employed', '2025-05-26 16:47:20', 41),
 (5, 'Ethan Hunt', '6665554444', 'employed', '2025-05-26 16:47:20', 37),
@@ -147,7 +145,10 @@ INSERT INTO `patients` (`id`, `full_name`, `phone`, `working_type`, `created_at`
 (8, 'Hannah Lee', '8887776666', 'unemployed', '2025-05-26 16:47:20', 26),
 (9, 'Ian Fleming', '4445556666', 'self-employed', '2025-05-26 16:47:20', 55),
 (10, 'Julia Roberts', '1112223333', 'employed', '2025-05-26 16:47:20', 31),
-(11, 'zouhair youssef', '0688000980', 'student', '2025-05-26 17:27:05', 21);
+(11, 'zouhair youssef', '0688000980', 'student', '2025-05-26 17:27:05', 21),
+(12, 'salma yi', '92328382', 'student', '2025-05-28 22:55:17', 82),
+(14, 'salma yi', '000000', 'student', '2025-05-28 22:55:41', 82),
+(15, 'test', '723727277', 'student', '2025-05-28 23:21:40', 90);
 
 --
 -- Indexes for dumped tables
@@ -195,7 +196,7 @@ ALTER TABLE `admins`
 -- AUTO_INCREMENT for table `appointments`
 --
 ALTER TABLE `appointments`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `dentists`
