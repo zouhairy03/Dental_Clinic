@@ -5,6 +5,10 @@ require_once 'config.php';
 $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-d', strtotime('-30 days'));
 $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
 
+// Calculate previous period dates
+$prev_start_date = date('Y-m-d', strtotime($start_date . ' -1 month'));
+$prev_end_date = date('Y-m-d', strtotime($end_date . ' -1 month'));
+
 // Appointment Summary with date filter
 $appointmentSummaryQuery = $pdo->prepare("
     SELECT status, COUNT(*) AS count 
@@ -14,6 +18,16 @@ $appointmentSummaryQuery = $pdo->prepare("
 ");
 $appointmentSummaryQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
 $appointmentSummary = $appointmentSummaryQuery->fetchAll(PDO::FETCH_KEY_PAIR);
+
+// Previous period appointment summary
+$prevAppointmentSummaryQuery = $pdo->prepare("
+    SELECT status, COUNT(*) AS count 
+    FROM appointments 
+    WHERE appointment_date BETWEEN :start_date AND :end_date
+    GROUP BY status
+");
+$prevAppointmentSummaryQuery->execute(['start_date' => $prev_start_date, 'end_date' => $prev_end_date]);
+$prevAppointmentSummary = $prevAppointmentSummaryQuery->fetchAll(PDO::FETCH_KEY_PAIR);
 
 // Appointment Trends with date filter
 $appointmentTrendsQuery = $pdo->prepare("
@@ -37,10 +51,10 @@ $treatmentStatsQuery = $pdo->prepare("
 $treatmentStatsQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
 $treatmentStats = $treatmentStatsQuery->fetchAll();
 
-// Patient by working type (not date-filtered as it's demographic data)
+// Patient by working type
 $workingTypeStats = $pdo->query("SELECT working_type, COUNT(*) AS count FROM patients GROUP BY working_type")->fetchAll();
 
-// Patient by age group (demographic data)
+// Patient by age group
 $ageGroups = [
     '0-18' => [0, 18],
     '19-35' => [19, 35],
@@ -92,6 +106,142 @@ $hourlyAppointmentsQuery = $pdo->prepare("
 ");
 $hourlyAppointmentsQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
 $hourlyAppointments = $hourlyAppointmentsQuery->fetchAll();
+
+// ========== FINANCIAL QUERIES ========== //
+
+// Payment Status Summary
+$paymentStatusQuery = $pdo->prepare("
+    SELECT status, COUNT(*) AS count 
+    FROM payments 
+    WHERE payment_date BETWEEN :start_date AND :end_date
+    GROUP BY status
+");
+$paymentStatusQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
+$paymentStatus = $paymentStatusQuery->fetchAll(PDO::FETCH_KEY_PAIR);
+
+// Previous period payment status
+$prevPaymentStatusQuery = $pdo->prepare("
+    SELECT status, COUNT(*) AS count 
+    FROM payments 
+    WHERE payment_date BETWEEN :start_date AND :end_date
+    GROUP BY status
+");
+$prevPaymentStatusQuery->execute(['start_date' => $prev_start_date, 'end_date' => $prev_end_date]);
+$prevPaymentStatus = $prevPaymentStatusQuery->fetchAll(PDO::FETCH_KEY_PAIR);
+
+// Payment Method Distribution
+$paymentMethodsQuery = $pdo->prepare("
+    SELECT payment_method, COUNT(*) AS count 
+    FROM payments 
+    WHERE payment_date BETWEEN :start_date AND :end_date
+    GROUP BY payment_method
+");
+$paymentMethodsQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
+$paymentMethods = $paymentMethodsQuery->fetchAll();
+
+// Daily Revenue Trend
+$revenueTrendQuery = $pdo->prepare("
+    SELECT payment_date AS date, SUM(amount) AS total 
+    FROM payments 
+    WHERE status = 'completed' AND payment_date BETWEEN :start_date AND :end_date
+    GROUP BY payment_date 
+    ORDER BY payment_date
+");
+$revenueTrendQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
+$revenueTrend = $revenueTrendQuery->fetchAll();
+
+// Previous period revenue
+$prevRevenueQuery = $pdo->prepare("
+    SELECT SUM(amount) AS total 
+    FROM payments 
+    WHERE status = 'completed' AND payment_date BETWEEN :start_date AND :end_date
+");
+$prevRevenueQuery->execute(['start_date' => $prev_start_date, 'end_date' => $prev_end_date]);
+$prevRevenue = $prevRevenueQuery->fetchColumn() ?: 0;
+
+// Invoice Status Summary
+$invoiceStatusQuery = $pdo->prepare("
+    SELECT status, COUNT(*) AS count 
+    FROM invoices 
+    WHERE invoice_date BETWEEN :start_date AND :end_date
+    GROUP BY status
+");
+$invoiceStatusQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
+$invoiceStatus = $invoiceStatusQuery->fetchAll(PDO::FETCH_KEY_PAIR);
+
+// Previous period invoices
+$prevInvoiceStatusQuery = $pdo->prepare("
+    SELECT status, COUNT(*) AS count 
+    FROM invoices 
+    WHERE invoice_date BETWEEN :start_date AND :end_date
+    GROUP BY status
+");
+$prevInvoiceStatusQuery->execute(['start_date' => $prev_start_date, 'end_date' => $prev_end_date]);
+$prevInvoiceStatus = $prevInvoiceStatusQuery->fetchAll(PDO::FETCH_KEY_PAIR);
+
+// Total Revenue Calculation
+$totalRevenueQuery = $pdo->prepare("
+    SELECT SUM(amount) AS total 
+    FROM payments 
+    WHERE status = 'completed' AND payment_date BETWEEN :start_date AND :end_date
+");
+$totalRevenueQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
+$totalRevenue = $totalRevenueQuery->fetchColumn() ?: 0;
+
+// Total Invoices
+$totalInvoicesQuery = $pdo->prepare("
+    SELECT COUNT(*) 
+    FROM invoices 
+    WHERE invoice_date BETWEEN :start_date AND :end_date
+");
+$totalInvoicesQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
+$totalInvoices = $totalInvoicesQuery->fetchColumn();
+
+// Previous period invoices
+$prevTotalInvoicesQuery = $pdo->prepare("
+    SELECT COUNT(*) 
+    FROM invoices 
+    WHERE invoice_date BETWEEN :start_date AND :end_date
+");
+$prevTotalInvoicesQuery->execute(['start_date' => $prev_start_date, 'end_date' => $prev_end_date]);
+$prevTotalInvoices = $prevTotalInvoicesQuery->fetchColumn();
+
+// Total Payments
+$totalPaymentsQuery = $pdo->prepare("
+    SELECT COUNT(*) 
+    FROM payments 
+    WHERE payment_date BETWEEN :start_date AND :end_date
+");
+$totalPaymentsQuery->execute(['start_date' => $start_date, 'end_date' => $end_date]);
+$totalPayments = $totalPaymentsQuery->fetchColumn();
+
+// Previous period payments
+$prevTotalPaymentsQuery = $pdo->prepare("
+    SELECT COUNT(*) 
+    FROM payments 
+    WHERE payment_date BETWEEN :start_date AND :end_date
+");
+$prevTotalPaymentsQuery->execute(['start_date' => $prev_start_date, 'end_date' => $prev_end_date]);
+$prevTotalPayments = $prevTotalPaymentsQuery->fetchColumn();
+
+// Calculate percentage changes
+function calculateChange($current, $previous) {
+    if ($previous == 0) return $current == 0 ? 0 : 100;
+    return round((($current - $previous) / $previous) * 100);
+}
+
+// Appointment status changes
+$appointmentChanges = [];
+foreach (['scheduled', 'completed', 'cancelled'] as $status) {
+    $current = $appointmentSummary[$status] ?? 0;
+    $previous = $prevAppointmentSummary[$status] ?? 0;
+    $appointmentChanges[$status] = calculateChange($current, $previous);
+}
+
+// Financial changes
+$revenueChange = calculateChange($totalRevenue, $prevRevenue);
+$invoicesChange = calculateChange($totalInvoices, $prevTotalInvoices);
+$paymentsChange = calculateChange($totalPayments, $prevTotalPayments);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -108,6 +258,9 @@ $hourlyAppointments = $hourlyAppointmentsQuery->fetchAll();
             --primary: #2cb5a0;
             --secondary: #f0f7fa;
             --accent: #ff7f50;
+            --revenue: #28a745;
+            --invoices: #17a2b8;
+            --payments: #6f42c1;
         }
 
         body {
@@ -209,17 +362,52 @@ $hourlyAppointments = $hourlyAppointmentsQuery->fetchAll();
             border-radius: 0 8px 8px 0;
             margin-top: 1rem;
         }
+        
+        .section-title {
+            position: relative;
+            padding-bottom: 10px;
+            margin: 2rem 0 1.5rem;
+            border-bottom: 2px solid rgba(44,181,160,0.2);
+        }
+        
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100px;
+            height: 2px;
+            background: var(--primary);
+        }
+        
+        .change-indicator {
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .change-positive {
+            color: #28a745;
+        }
+        
+        .change-negative {
+            color: #dc3545;
+        }
+        
+        .change-neutral {
+            color: #6c757d;
+        }
 
     </style>
 </head>
 <body>
-      <!-- Breadcrumb -->
-      <nav class="mb-4">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><i class="fas fa-home me-2"></i><a href="dashboard.php">Dashboard</a></li>
-                <li class="breadcrumb-item active"><i class="fas fa-file-waveform  me-2"></i>Reports</li>
-            </ol>
-        </nav>
+<nav class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><i class="fas fa-home me-2"></i><a href="dashboard.php">Dashboard</a></li>
+        <li class="breadcrumb-item active"><i class="fas fa-file-waveform  me-2"></i>Reports</li>
+    </ol>
+</nav>
 
 <div class="container">
     <h1 class="mb-4"><i class="fas fa-chart-pie me-2"></i>Dental Clinic Analytics</h1>
@@ -272,6 +460,9 @@ $hourlyAppointments = $hourlyAppointmentsQuery->fetchAll();
         
         foreach ($statusConfig as $status => $config): 
             $count = $appointmentSummary[$status] ?? 0;
+            $change = $appointmentChanges[$status];
+            $changeClass = $change > 0 ? 'change-positive' : ($change < 0 ? 'change-negative' : 'change-neutral');
+            $arrowIcon = $change > 0 ? 'fa-arrow-up' : ($change < 0 ? 'fa-arrow-down' : 'fa-minus');
         ?>
         <div class="col-md-4">
             <div class="dashboard-card p-3">
@@ -282,15 +473,88 @@ $hourlyAppointments = $hourlyAppointmentsQuery->fetchAll();
                     <div>
                         <div class="text-muted text-uppercase small"><?= ucfirst($status) ?></div>
                         <div class="h2 mb-0" style="color: <?= $config['color'] ?>"><?= $count ?></div>
+                        <div class="change-indicator <?= $changeClass ?>">
+                            <i class="fas <?= $arrowIcon ?>"></i>
+                            <span><?= abs($change) ?>% from last month</span>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <?php endforeach; ?>
     </div>
+    
+    <!-- Financial Summary Cards -->
+    <h3 class="section-title">Financial Summary</h3>
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="dashboard-card p-3">
+                <div class="d-flex align-items-center">
+                    <div class="metric-icon me-3" style="background: var(--revenue)">
+                        <i class="fas fa-money-bill-wave fa-2x text-white"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted text-uppercase small">Total Revenue</div>
+                        <div class="h2 mb-0" style="color: var(--revenue)"><?= number_format($totalRevenue, 2) ?> MAD</div>
+                        <?php
+                        $changeClass = $revenueChange > 0 ? 'change-positive' : ($revenueChange < 0 ? 'change-negative' : 'change-neutral');
+                        $arrowIcon = $revenueChange > 0 ? 'fa-arrow-up' : ($revenueChange < 0 ? 'fa-arrow-down' : 'fa-minus');
+                        ?>
+                        <div class="change-indicator <?= $changeClass ?>">
+                            <i class="fas <?= $arrowIcon ?>"></i>
+                            <span><?= abs($revenueChange) ?>% from last month</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card p-3">
+                <div class="d-flex align-items-center">
+                    <div class="metric-icon me-3" style="background: var(--invoices)">
+                        <i class="fas fa-file-invoice fa-2x text-white"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted text-uppercase small">Total Invoices</div>
+                        <div class="h2 mb-0" style="color: var(--invoices)"><?= $totalInvoices ?></div>
+                        <?php
+                        $changeClass = $invoicesChange > 0 ? 'change-positive' : ($invoicesChange < 0 ? 'change-negative' : 'change-neutral');
+                        $arrowIcon = $invoicesChange > 0 ? 'fa-arrow-up' : ($invoicesChange < 0 ? 'fa-arrow-down' : 'fa-minus');
+                        ?>
+                        <div class="change-indicator <?= $changeClass ?>">
+                            <i class="fas <?= $arrowIcon ?>"></i>
+                            <span><?= abs($invoicesChange) ?>% from last month</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card p-3">
+                <div class="d-flex align-items-center">
+                    <div class="metric-icon me-3" style="background: var(--payments)">
+                        <i class="fas fa-credit-card fa-2x text-white"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted text-uppercase small">Total Payments</div>
+                        <div class="h2 mb-0" style="color: var(--payments)"><?= $totalPayments ?></div>
+                        <?php
+                        $changeClass = $paymentsChange > 0 ? 'change-positive' : ($paymentsChange < 0 ? 'change-negative' : 'change-neutral');
+                        $arrowIcon = $paymentsChange > 0 ? 'fa-arrow-up' : ($paymentsChange < 0 ? 'fa-arrow-down' : 'fa-minus');
+                        ?>
+                        <div class="change-indicator <?= $changeClass ?>">
+                            <i class="fas <?= $arrowIcon ?>"></i>
+                            <span><?= abs($paymentsChange) ?>% from last month</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Charts Grid -->
-    <div class="row g-4">
+    <h3 class="section-title">Appointments & Patients</h3>
+    <div class="row g-4 mb-5">
         <!-- Appointments Trend -->
         <div class="col-lg-6">
             <div class="dashboard-card">
@@ -338,7 +602,62 @@ $hourlyAppointments = $hourlyAppointmentsQuery->fetchAll();
                 </div>
             </div>
         </div>
+    </div>
+    
+    <!-- Financial Charts -->
+    <h3 class="section-title">Financial Analytics</h3>
+    <div class="row g-4 mb-5">
+        <!-- Revenue Trend -->
+        <div class="col-lg-6">
+            <div class="dashboard-card">
+                <div class="p-3 border-bottom">
+                    <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Revenue Trend</h5>
+                </div>
+                <div class="chart-container">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+        </div>
         
+        <!-- Payment Status -->
+        <div class="col-lg-3">
+            <div class="dashboard-card">
+                <div class="p-3 border-bottom">
+                    <h5 class="mb-0"><i class="fas fa-money-check me-2"></i>Payment Status</h5>
+                </div>
+                <div class="chart-container">
+                    <canvas id="paymentStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Invoice Status -->
+        <div class="col-lg-3">
+            <div class="dashboard-card">
+                <div class="p-3 border-bottom">
+                    <h5 class="mb-0"><i class="fas fa-file-invoice-dollar me-2"></i>Invoice Status</h5>
+                </div>
+                <div class="chart-container">
+                    <canvas id="invoiceStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Payment Methods -->
+        <div class="col-lg-6">
+            <div class="dashboard-card">
+                <div class="p-3 border-bottom">
+                    <h5 class="mb-0"><i class="fas fa-credit-card me-2"></i>Payment Methods</h5>
+                </div>
+                <div class="chart-container">
+                    <canvas id="paymentMethodChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Lists -->
+    <div class="row g-4">
         <!-- Top Dentists -->
         <div class="col-lg-6">
             <div class="dashboard-card">
@@ -434,7 +753,10 @@ const chartConfig = {
 const colors = {
     primary: 'rgba(44,181,160,0.8)',
     accent: 'rgba(255,127,80,0.8)',
-    secondary: 'rgba(108,117,125,0.8)'
+    secondary: 'rgba(108,117,125,0.8)',
+    revenue: 'rgba(40,167,69,0.8)',
+    invoices: 'rgba(23,162,184,0.8)',
+    payments: 'rgba(111,66,193,0.8)'
 };
 
 // Appointments Trend Chart
@@ -543,6 +865,131 @@ new Chart(document.getElementById('hourlyChart'), {
                     text: 'Number of Appointments'
                 }
             }
+        }
+    }
+});
+
+// ========== FINANCIAL CHARTS ========== //
+
+// Revenue Trend Chart
+new Chart(document.getElementById('revenueChart'), {
+    type: 'line',
+    data: {
+        labels: <?= json_encode(array_column($revenueTrend, 'date')) ?>,
+        datasets: [{
+            label: 'Revenue (MAD)',
+            data: <?= json_encode(array_column($revenueTrend, 'total')) ?>,
+            borderColor: colors.revenue,
+            backgroundColor: 'rgba(40,167,69,0.1)',
+            fill: true,
+            tension: 0.4,
+            borderWidth: 2
+        }]
+    },
+    options: {
+        ...chartConfig,
+        scales: {
+            ...chartConfig.scales,
+            y: {
+                ...chartConfig.scales.y,
+                title: {
+                    display: true,
+                    text: 'Amount (MAD)'
+                }
+            }
+        }
+    }
+});
+
+// Payment Status Chart
+const paymentStatusData = {
+    labels: ['Completed', 'Pending', 'Failed', 'Refunded'],
+    datasets: [{
+        data: [
+            <?= $paymentStatus['completed'] ?? 0 ?>,
+            <?= $paymentStatus['pending'] ?? 0 ?>,
+            <?= $paymentStatus['failed'] ?? 0 ?>,
+            <?= $paymentStatus['refunded'] ?? 0 ?>
+        ],
+        backgroundColor: [
+            '#28a745',
+            '#ffc107',
+            '#dc3545',
+            '#6c757d'
+        ],
+        borderWidth: 0
+    }]
+};
+
+new Chart(document.getElementById('paymentStatusChart'), {
+    type: 'doughnut',
+    data: paymentStatusData,
+    options: {
+        ...chartConfig,
+        cutout: '60%',
+        plugins: {
+            legend: { position: 'bottom' }
+        }
+    }
+});
+
+// Invoice Status Chart
+const invoiceStatusData = {
+    labels: ['Paid', 'Pending', 'Overdue', 'Partial', 'Cancelled'],
+    datasets: [{
+        data: [
+            <?= $invoiceStatus['paid'] ?? 0 ?>,
+            <?= $invoiceStatus['pending'] ?? 0 ?>,
+            <?= $invoiceStatus['overdue'] ?? 0 ?>,
+            <?= $invoiceStatus['partial'] ?? 0 ?>,
+            <?= $invoiceStatus['cancelled'] ?? 0 ?>
+        ],
+        backgroundColor: [
+            '#28a745',
+            '#ffc107',
+            '#dc3545',
+            '#17a2b8',
+            '#6c757d'
+        ],
+        borderWidth: 0
+    }]
+};
+
+new Chart(document.getElementById('invoiceStatusChart'), {
+    type: 'doughnut',
+    data: invoiceStatusData,
+    options: {
+        ...chartConfig,
+        cutout: '60%',
+        plugins: {
+            legend: { position: 'bottom' }
+        }
+    }
+});
+
+// Payment Methods Chart
+const paymentMethodData = {
+    labels: <?= json_encode(array_column($paymentMethods, 'payment_method')) ?>,
+    datasets: [{
+        data: <?= json_encode(array_column($paymentMethods, 'count')) ?>,
+        backgroundColor: [
+            colors.primary,
+            colors.accent,
+            colors.revenue,
+            colors.payments,
+            colors.secondary
+        ],
+        borderWidth: 0
+    }]
+};
+
+new Chart(document.getElementById('paymentMethodChart'), {
+    type: 'pie',
+    data: paymentMethodData,
+    options: {
+        ...chartConfig,
+        plugins: {
+            legend: { position: 'right' }
         }
     }
 });

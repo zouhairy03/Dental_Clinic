@@ -1,4 +1,5 @@
 <?php
+session_start();
 require_once 'config.php';
 
 // Restrict access if not logged in
@@ -39,7 +40,7 @@ $totalPatients = $pdo->query("SELECT COUNT(*) FROM patients")->fetchColumn();
 // Procedures
 $procedureCount = $pdo->query("SELECT COUNT(*) FROM appointments WHERE treatment_type IS NOT NULL AND treatment_type != ''")->fetchColumn();
 
-// Appointment status counts
+// Appointment status counts - Fixed: Initialize all statuses to 0
 $statusStmt = $pdo->query("
     SELECT status, COUNT(*) as count 
     FROM appointments 
@@ -47,15 +48,20 @@ $statusStmt = $pdo->query("
 ");
 $statusCounts = $statusStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Format status counts for easier access
+// Initialize all statuses to 0
 $statusData = [
     'scheduled' => 0,
     'completed' => 0,
     'cancelled' => 0
 ];
+
+// Update counts from database
 foreach ($statusCounts as $status) {
     $statusData[$status['status']] = $status['count'];
 }
+
+// Calculate total appointments for percentages
+$totalAppointments = $statusData['scheduled'] + $statusData['completed'] + $statusData['cancelled'];
 
 // Patient demographics
 $demographicsStmt = $pdo->query("
@@ -101,9 +107,8 @@ $upcomingStmt = $pdo->prepare("
 $upcomingStmt->execute([$upcomingStart, $upcomingEnd]);
 $upcomingAppointments = $upcomingStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// notification
+// Notification system: Appointments in the next 5 minutes
 $now = new DateTime();
-$now->setTime((int)$now->format('H'), (int)$now->format('i'), 0);
 $inFiveMinutes = clone $now;
 $inFiveMinutes->modify('+5 minutes');
 
@@ -113,11 +118,46 @@ $stmt = $pdo->prepare("
     JOIN patients p ON p.id = a.patient_id 
     WHERE a.status = 'scheduled' 
       AND a.appointment_date = CURDATE()
-      AND a.appointment_time = ?
+      AND a.appointment_time BETWEEN ? AND ?
 ");
-$stmt->execute([$inFiveMinutes->format('H:i:s')]);
+$stmt->execute([
+    $now->format('H:i:s'),
+    $inFiveMinutes->format('H:i:s')
+]);
 $notifications = $stmt->fetchAll();
 $notifCount = count($notifications);
+
+// Calculate minutes for each notification
+$currentTime = new DateTime();
+foreach ($notifications as &$notification) {
+    $appointmentTime = new DateTime($notification['appointment_date'] . ' ' . $notification['appointment_time']);
+    $diff = $appointmentTime->getTimestamp() - $currentTime->getTimestamp();
+    $minutes = ceil($diff / 60);
+    $notification['minutes'] = max(0, $minutes);
+}
+
+// Payment statistics
+$totalRevenue = $pdo->query("SELECT SUM(amount) FROM payments")->fetchColumn() ?? 0;
+$pendingPayments = $pdo->query("SELECT SUM(amount) FROM payments WHERE status = 'pending'")->fetchColumn() ?? 0;
+$overdueInvoices = $pdo->query("SELECT SUM(total_amount) FROM invoices WHERE status = 'overdue'")->fetchColumn() ?? 0;
+
+// Recent payments
+$recentPayments = $pdo->query("
+    SELECT p.id, p.payment_date, p.amount, p.status, p.payment_method, pt.full_name
+    FROM payments p
+    JOIN patients pt ON p.patient_id = pt.id
+    ORDER BY p.payment_date DESC
+    LIMIT 5
+")->fetchAll(PDO::FETCH_ASSOC);
+
+// Recent invoices
+$recentInvoices = $pdo->query("
+    SELECT i.id, i.invoice_date, i.due_date, i.total_amount, i.status, pt.full_name
+    FROM invoices i
+    JOIN patients pt ON i.patient_id = pt.id
+    ORDER BY i.invoice_date DESC
+    LIMIT 5
+")->fetchAll(PDO::FETCH_ASSOC);
 
 date_default_timezone_set('Africa/Casablanca');
 
@@ -129,6 +169,68 @@ if ($hour < 12) {
 } else {
     $greeting = "Good Evening";
 }
+
+// Calculate percentage change helper function
+function calculateChange($current, $previous) {
+    if ($previous == 0) return $current == 0 ? 0 : 100;
+    return round((($current - $previous) / $previous) * 100);
+}
+
+// Get current month dates
+$currentMonthStart = date('Y-m-01');
+$currentMonthEnd = date('Y-m-t');
+
+// Get previous month dates
+$lastMonthStart = date('Y-m-01', strtotime('-1 month'));
+$lastMonthEnd = date('Y-m-t', strtotime('-1 month'));
+
+// Current month appointments
+$appointmentsCount = $pdo->query("
+    SELECT COUNT(*) 
+    FROM appointments 
+    WHERE appointment_date BETWEEN '$currentMonthStart' AND '$currentMonthEnd'
+")->fetchColumn();
+
+// Last month appointments
+$lastMonthAppointmentsCount = $pdo->query("
+    SELECT COUNT(*) 
+    FROM appointments 
+    WHERE appointment_date BETWEEN '$lastMonthStart' AND '$lastMonthEnd'
+")->fetchColumn();
+
+// Current month procedures
+$procedureCount = $pdo->query("
+    SELECT COUNT(*) 
+    FROM appointments 
+    WHERE appointment_date BETWEEN '$currentMonthStart' AND '$currentMonthEnd'
+    AND treatment_type IS NOT NULL
+")->fetchColumn();
+
+// Last month procedures
+$lastMonthProcedures = $pdo->query("
+    SELECT COUNT(*) 
+    FROM appointments 
+    WHERE appointment_date BETWEEN '$lastMonthStart' AND '$lastMonthEnd'
+    AND treatment_type IS NOT NULL
+")->fetchColumn();
+
+// Last month pending appointments
+$lastMonthPending = $pdo->query("
+    SELECT COUNT(*) 
+    FROM appointments 
+    WHERE status = 'scheduled'
+    AND appointment_date BETWEEN '$lastMonthStart' AND '$lastMonthEnd'
+")->fetchColumn();
+
+// Total patients
+$totalPatients = $pdo->query("SELECT COUNT(*) FROM patients")->fetchColumn();
+
+// Last month total patients
+$lastMonthPatients = $pdo->query("
+    SELECT COUNT(*) 
+    FROM patients 
+    WHERE created_at BETWEEN '$lastMonthStart' AND '$lastMonthEnd'
+")->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -150,65 +252,66 @@ if ($hour < 12) {
             --employed: #1cc88a;
             --self-employed: #36b9cc;
             --unemployed: #f6c23e;
+            --success: #28a745;
+            --warning: #ffc107;
+            --danger: #dc3545;
+            --info: #17a2b8;
         }
 
         body {
             font-family: 'Poppins', sans-serif;
-            background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="%232cb5a033" d="M44.6,-58.1C56.3,-49.6,62.6,-33.3,66.1,-16.8C69.6,-0.3,70.4,16.5,63.9,29.1C57.4,41.7,43.7,50.2,29.9,56.9C16.1,63.6,2.2,68.5,-12.6,67.7C-27.4,66.8,-42.9,60.2,-55.4,50.3C-67.9,40.4,-77.3,27.2,-79.9,12.6C-82.5,-2.1,-78.3,-18.2,-69.3,-31.1C-60.3,-44,-46.5,-53.7,-32.3,-61.3C-18.1,-68.9,-3.5,-74.4,12.1,-71.3C27.7,-68.2,55.4,-56.5,62.7,-42.5C70,-28.5,57,-12.3,53.9,2.1C50.8,16.5,57.6,33,55.9,47.8C54.2,62.6,44,75.7,31.8,81.8C19.6,87.9,5.3,87.1,-8.2,84.1C-21.7,81.2,-35.3,76.1,-45.6,67.3C-55.9,58.4,-62.8,45.8,-68.9,33.3C-75,20.8,-80.3,8.4,-79.8,-3.7C-79.3,-15.8,-73,-31.6,-63.3,-44.5C-53.6,-57.4,-40.5,-67.4,-26.6,-74.3C-12.7,-81.1,2,-84.8,16.4,-83.3C30.8,-81.8,45.1,-75,56.8,-65.3C68.5,-55.5,77.7,-42.7,81.2,-28.6C84.7,-14.5,82.5,0.9,76.5,13.4C70.5,25.8,60.7,35.3,49.9,44.3C39.1,53.3,27.3,61.8,14.1,64.3C0.9,66.8,-13.6,63.4,-25.4,57.5C-37.2,51.6,-46.3,43.3,-54.3,34.1C-62.3,24.9,-69.2,14.8,-71.7,3.3C-74.3,-8.3,-72.5,-21.3,-66.3,-32.2C-60.1,-43.1,-49.5,-51.9,-37.8,-60.3C-26.1,-68.7,-13,-76.6,1.1,-78.6C15.2,-80.6,30.5,-76.7,44.6,-58.1Z"/></svg>'),
-                        linear-gradient(160deg, #f8f9fa 0%, #e3f2fd 100%);
-            background-size: cover;
+            background-color: #f8f9fa;
             min-height: 100vh;
+            color: #333;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><path fill="%232cb5a0" fill-opacity="0.03" d="M20,20 C40,0 60,0 80,20 C100,40 100,60 80,80 C60,100 40,100 20,80 C0,60 0,40 20,20 Z" /></svg>');
+            background-size: 200px;
         }
 
         .sidebar {
             width: 280px;
-            background: linear-gradient(160deg, var(--secondary) 0%, white 100%);
-            box-shadow: 4px 0 15px rgba(0,0,0,0.05);
+            background: linear-gradient(180deg, #1a3c4a 0%, #0d2029 100%);
+            color: white;
+            box-shadow: 4px 0 15px rgba(0,0,0,0.1);
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 1000;
         }
 
         .sidebar-header {
             padding: 1.5rem;
-            border-bottom: 2px solid rgba(44,181,160,0.1);
-            background: rgba(255,255,255,0.9);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.1);
         }
 
         .nav-link {
-            color: #3a3a3a !important;
+            color: rgba(255,255,255,0.8) !important;
             padding: 12px 25px !important;
             margin: 8px 15px;
             border-radius: 12px;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
 
-        .nav-link:hover {
+        .nav-link:hover, .nav-link.active {
             background: var(--primary) !important;
             color: white !important;
             transform: translateX(8px);
-            box-shadow: 2px 4px 12px rgba(44,181,160,0.2);
-        }
-
-        .nav-link.active {
-            background: var(--primary);
-            color: white !important;
-            font-weight: 500;
+            box-shadow: 2px 4px 12px rgba(44,181,160,0.3);
         }
 
         .content {
             margin-left: 280px;
             transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             padding: 2rem;
+            background-color: #f8f9fa;
         }
 
         .topbar {
             padding: 1rem 2rem;
-            background: rgba(255,255,255,0.85);
-            backdrop-filter: blur(12px);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            background: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
             position: sticky;
             top: 0;
             z-index: 999;
+            border-bottom: 1px solid #eaeaea;
         }
 
         .icon-btn {
@@ -233,11 +336,11 @@ if ($hour < 12) {
         }
 
         .welcome-card {
-            background: rgba(255,255,255,0.9);
-            border: 1px solid rgba(44,181,160,0.15);
+            background: white;
             border-radius: 20px;
-            backdrop-filter: blur(8px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
             animation: cardEntrance 0.6s ease-out;
+            border: none;
         }
 
         @keyframes cardEntrance {
@@ -250,14 +353,15 @@ if ($hour < 12) {
             border: none;
             border-radius: 15px;
             overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            background: white;
         }
 
         .metric-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
         }
         
-        /* Dashboard grid layout */
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -265,12 +369,12 @@ if ($hour < 12) {
         }
         
         .dashboard-card {
-            background: rgba(255, 255, 255, 0.95);
+            background: white;
             border-radius: 18px;
             box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
             padding: 1.5rem;
             transition: all 0.3s ease;
-            border: 1px solid rgba(44, 181, 160, 0.1);
+            border: none;
         }
         
         .dashboard-card:hover {
@@ -378,6 +482,7 @@ if ($hour < 12) {
             margin-bottom: 0.8rem;
             background: #f8f9fa;
             transition: all 0.2s ease;
+            border-left: 3px solid var(--primary);
         }
         
         .appointment-item:hover {
@@ -467,14 +572,295 @@ if ($hour < 12) {
             font-weight: 600;
             font-size: 1.2rem;
         }
+        
+        .payment-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 15px;
+            padding: 1.2rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        
+        .total-revenue {
+            color: var(--success);
+        }
+        
+        .pending-payments {
+            color: var(--warning);
+        }
+        
+        .overdue-invoices {
+            color: var(--danger);
+        }
+        
+        .payment-method-badge {
+            padding: 0.3em 0.6em;
+            border-radius: 10px;
+            font-size: 0.85em;
+        }
+        
+        .badge-cash {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-credit {
+            background: #cce5ff;
+            color: #004085;
+        }
+        
+        .badge-transfer {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+        
+        .invoice-status-badge {
+            padding: 0.3em 0.6em;
+            border-radius: 10px;
+            font-size: 0.85em;
+        }
+        
+        .badge-paid {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .badge-overdue {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .online-indicator {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: rgba(40, 167, 69, 0.15);
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            color: var(--success);
+            font-weight: 500;
+        }
+
+        .online-indicator::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            background: var(--success);
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(40, 167, 69, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+        }
+        
+        .moroccan-pattern {
+            position: absolute;
+            top: 0;
+            right: 0;
+            opacity: 0.03;
+            width: 300px;
+            height: 300px;
+            z-index: -1;
+        }
+        
+        .mad-currency {
+            font-weight: 600;
+            color: #1a3c4a;
+        }
+        
+        .moroccan-theme {
+            background: linear-gradient(135deg, #1a3c4a 0%, #0d2029 100%);
+            color: white;
+        }
+        
+        .moroccan-theme .dashboard-card-title {
+            color: #2cb5a0;
+        }
+        
+        .moroccan-accent {
+            background: #ff7f50;
+        }
+        
+        .moroccan-decor {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 80px;
+            height: 80px;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50,10 A40,40 0 1,1 50,90 A40,40 0 1,1 50,10 Z" fill="none" stroke="%232cb5a0" stroke-width="2"/><circle cx="50" cy="50" r="20" fill="%23ff7f50" /></svg>');
+            opacity: 0.1;
+            z-index: -1;
+        }
+        
+        .logo-text {
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: white;
+        }
+        
+        .sidebar .logo-text {
+            color: #ff7f50;
+        }
+        
+        .greeting-card {
+            background: linear-gradient(135deg, #2cb5a0 0%, #1a3c4a 100%);
+            color: white;
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .greeting-card::before {
+            content: "";
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200px;
+            height: 200px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 50%;
+        }
+        
+        .greeting-card::after {
+            content: "";
+            position: absolute;
+            bottom: -30%;
+            left: -30%;
+            width: 150px;
+            height: 150px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 50%;
+        }
+        
+        .notification-bell {
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: #dc3545;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+        
+        .notification-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+        
+        .notification-toast {
+            background: #fff;
+            border-left: 4px solid #2cb5a0;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 16px;
+            margin-bottom: 10px;
+            max-width: 350px;
+            display: flex;
+            align-items: center;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        .notification-icon {
+            background: rgba(44, 181, 160, 0.15);
+            color: #2cb5a0;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        
+        .notification-content h5 {
+            margin: 0 0 5px 0;
+            font-size: 1rem;
+            color: #333;
+        }
+        
+        .notification-content p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .notification-close {
+            background: none;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .notification-toast.emergency {
+            border-left-color: #dc3545;
+        }
+        
+        .notification-toast.emergency .notification-icon {
+            background: rgba(220, 53, 69, 0.15);
+            color: #dc3545;
+        }
     </style>
 </head>
 <body>
     <!-- Sidebar -->
     <div id="sidebar" class="sidebar position-fixed h-100">
         <div class="sidebar-header">
-            <h4 class="mb-0 text-primary fw-bold"><i class="fas fa-tooth me-2"></i>DentalCare</h4>
-            <small class="text-muted">Administration Panel</small>
+            <h4 class="mb-0 logo-text"><i class="fas fa-tooth me-2"></i>DentalCare</h4>
+            <small class="text-white-50">Administration Panel</small>
         </div>
         <ul class="nav flex-column p-3 mt-2">
             <li class="nav-item">
@@ -493,6 +879,11 @@ if ($hour < 12) {
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link" href="payments.php">
+                    <i class="fas fa-credit-card me-2"></i>Payments & Invoices
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link" href="reports.php">
                     <i class="fas fa-file-waveform me-2"></i>Reports
                 </a>
@@ -503,6 +894,9 @@ if ($hour < 12) {
                 </a>
             </li>
         </ul>
+        <div class="position-absolute bottom-0 w-100 p-3 text-center text-white-50">
+            <small>&copy; 2025 DentalCare. All rights reserved.</small>
+        </div>
     </div>
 
     <!-- Main Content -->
@@ -511,36 +905,37 @@ if ($hour < 12) {
         <div class="topbar d-flex justify-content-between align-items-center mb-4">
             <div class="d-flex align-items-center">
                 <i class="fas fa-bars sidebar-toggle me-3 fs-5" onclick="toggleSidebar()"></i>
-                <h5 class="mb-0 text-muted">Welcome back, <span class="text-primary">Dr. <?= $adminName ?></span></h5>
+                <h5 class="mb-0">Welcome back, <span class="text-primary">Dr. <?= $adminName ?></span></h5>
             </div>
             <div class="d-flex align-items-center gap-3">
-                <button class="icon-btn position-relative" id="notifBell">
-                    <i class="fas fa-bell text-secondary"></i>
+                <div class="online-indicator">
+                    Online
+                </div>
+                <div class="notification-bell" id="notifBell">
+                    <i class="fas fa-bell fa-lg text-secondary"></i>
                     <?php if ($notifCount > 0): ?>
-                        <span class="badge bg-danger position-absolute top-0 start-100 translate-middle">
-                            <?= $notifCount ?>
-                        </span>
+                        <span class="notification-badge"><?= $notifCount ?></span>
                     <?php endif; ?>
-                </button>
+                </div>
                 <a href="logout.php" class="btn btn-sm btn-outline-danger px-3">
                     <i class="fas fa-sign-out-alt me-2"></i>Logout
                 </a>
             </div>
         </div>
-
         <!-- Dashboard Content -->
         <div class="container-fluid">
             <!-- Welcome Card -->
-            <div class="welcome-card p-4 mb-4">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="bg-primary rounded-circle p-3">
-                        <i class="fas fa-smile-beam fa-2x text-white"></i>
+            <div class="greeting-card p-4 mb-4">
+                <div class="d-flex align-items-center gap-3 position-relative" style="z-index: 2;">
+                    <div class="bg-white rounded-circle p-3">
+                        <i class="fas fa-smile-beam fa-2x text-primary"></i>
                     </div>
                     <div>
-        <h3 class="mb-1"><?= $greeting ?>, Dr. <?= $adminName ?></h3>
-        <p class="text-muted mb-0">You have <?= $appointmentsToday ?> appointment(s) today</p>
-    </div>
+                        <h3 class="mb-1 text-white"><?= $greeting ?>, Dr. <?= $adminName ?></h3>
+                        <p class="text-white mb-0">You have <?= $appointmentsToday ?> appointment(s) today</p>
+                    </div>
                 </div>
+                <div class="moroccan-decor"></div>
             </div>
 
             <!-- Dashboard Grid -->
@@ -556,32 +951,116 @@ if ($hour < 12) {
                                 <i class="fas fa-calendar-check fa-2x"></i>
                             </div>
                             <div class="stat-number"><?= $appointmentsCount ?></div>
-                            <div class="stat-label">Appointments This Week</div>
-                            <div class="<?= $changeColor ?>">
-                                <i class="fas <?= $change >= 0 ? 'fa-arrow-up' : 'fa-arrow-down' ?> me-1"></i>
-                                <?= $changeSign . abs($change) ?>% from last week
+                            <div class="stat-label">Appointments This Month</div>
+                            <?php
+                            $appointmentChange = calculateChange($appointmentsCount, $lastMonthAppointmentsCount);
+                            $appointmentChangeSign = $appointmentChange >= 0 ? '+' : '';
+                            $appointmentChangeColor = $appointmentChange >= 0 ? 'text-success' : 'text-danger';
+                            ?>
+                            <div class="<?= $appointmentChangeColor ?>">
+                                <i class="fas <?= $appointmentChange >= 0 ? 'fa-arrow-up' : 'fa-arrow-down' ?> me-1"></i>
+                                <?= $appointmentChangeSign . abs($appointmentChange) ?>% from last month
                             </div>
                         </div>
+                        
                         <div class="col-md-6 mb-4">
                             <div class="stat-icon bg-green-light">
                                 <i class="fas fa-user-injured fa-2x"></i>
                             </div>
                             <div class="stat-number"><?= $totalPatients ?></div>
                             <div class="stat-label">Total Patients</div>
+                            <?php
+                            $patientChange = calculateChange($totalPatients, $lastMonthPatients);
+                            $patientChangeSign = $patientChange >= 0 ? '+' : '';
+                            $patientChangeColor = $patientChange >= 0 ? 'text-success' : 'text-danger';
+                            ?>
+                            <div class="<?= $patientChangeColor ?>">
+                                <i class="fas <?= $patientChange >= 0 ? 'fa-arrow-up' : 'fa-arrow-down' ?> me-1"></i>
+                                <?= $patientChangeSign . abs($patientChange) ?>% from last month
+                            </div>
                         </div>
+                        
                         <div class="col-md-6 mb-4">
                             <div class="stat-icon bg-purple-light">
                                 <i class="fas fa-tooth fa-2x"></i>
                             </div>
                             <div class="stat-number"><?= $procedureCount ?></div>
-                            <div class="stat-label">Procedures</div>
+                            <div class="stat-label">Procedures This Month</div>
+                            <?php
+                            $procedureChange = calculateChange($procedureCount, $lastMonthProcedures);
+                            $procedureChangeSign = $procedureChange >= 0 ? '+' : '';
+                            $procedureChangeColor = $procedureChange >= 0 ? 'text-success' : 'text-danger';
+                            ?>
+                            <div class="<?= $procedureChangeColor ?>">
+                                <i class="fas <?= $procedureChange >= 0 ? 'fa-arrow-up' : 'fa-arrow-down' ?> me-1"></i>
+                                <?= $procedureChangeSign . abs($procedureChange) ?>% from last month
+                            </div>
                         </div>
+                        
                         <div class="col-md-6 mb-4">
                             <div class="stat-icon bg-yellow-light">
                                 <i class="fas fa-clock fa-2x"></i>
                             </div>
                             <div class="stat-number"><?= $statusData['scheduled'] ?></div>
                             <div class="stat-label">Pending Appointments</div>
+                            <?php
+                            $pendingChange = calculateChange($statusData['scheduled'], $lastMonthPending);
+                            $pendingChangeSign = $pendingChange >= 0 ? '+' : '';
+                            $pendingChangeColor = $pendingChange >= 0 ? 'text-success' : 'text-danger';
+                            ?>
+                            <div class="<?= $pendingChangeColor ?>">
+                                <i class="fas <?= $pendingChange >= 0 ? 'fa-arrow-up' : 'fa-arrow-down' ?> me-1"></i>
+                                <?= $pendingChangeSign . abs($pendingChange) ?>% from last month
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Financial Overview -->
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        <h5 class="dashboard-card-title"><i class="fas fa-money-bill-wave me-2"></i>Financial Overview (MAD)</h5>
+                    </div>
+                    <div class="payment-stats">
+                        <div class="stat-card">
+                            <div class="stat-value total-revenue"><?= number_format($totalRevenue, 2) ?> <span class="mad-currency">MAD</span></div>
+                            <div class="stat-label">Total Revenue</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value pending-payments"><?= number_format($pendingPayments, 2) ?> <span class="mad-currency">MAD</span></div>
+                            <div class="stat-label">Pending Payments</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value overdue-invoices"><?= number_format($overdueInvoices, 2) ?> <span class="mad-currency">MAD</span></div>
+                            <div class="stat-label">Overdue Invoices</div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-credit-card me-2"></i> Recent Payments (MAD)</h6>
+                            <a href="payments.php" class="btn btn-sm btn-outline-primary">View All</a>
+                        </div>
+                        <div class="recent-appointments">
+                            <?php foreach ($recentPayments as $payment): ?>
+                                <div class="appointment-item">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <strong><?= htmlspecialchars($payment['full_name']) ?></strong>
+                                        <span class="text-muted"><?= date('M d', strtotime($payment['payment_date'])) ?></span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold"><?= number_format($payment['amount'], 2) ?> <span class="mad-currency">MAD</span></span>
+                                        <span class="payment-method-badge 
+                                            <?= $payment['payment_method'] == 'cash' ? 'badge-cash' : 
+                                               ($payment['payment_method'] == 'credit_card' ? 'badge-credit' : 'badge-transfer') ?>">
+                                            <?= ucfirst(str_replace('_', ' ', $payment['payment_method'])) ?>
+                                        </span>
+                                    </div>
+                                    <div class="mt-2 text-muted">
+                                        <i class="fas fa-circle me-1 <?= $payment['status'] == 'completed' ? 'text-success' : 'text-warning' ?>"></i> 
+                                        <?= ucfirst($payment['status']) ?>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                 </div>
@@ -621,7 +1100,7 @@ if ($hour < 12) {
                                 <div class="status-count"><?= $statusData['completed'] ?></div>
                             </div>
                             <div class="status-percentage text-success">
-                                <?= round(($statusData['completed'] / ($statusData['completed'] + $statusData['scheduled'] + $statusData['cancelled'])) * 100) ?>%
+                                <?= $totalAppointments > 0 ? round(($statusData['completed'] / $totalAppointments) * 100) : 0 ?>%
                             </div>
                         </div>
                         
@@ -634,7 +1113,7 @@ if ($hour < 12) {
                                 <div class="status-count"><?= $statusData['scheduled'] ?></div>
                             </div>
                             <div class="status-percentage text-info">
-                                <?= round(($statusData['scheduled'] / ($statusData['completed'] + $statusData['scheduled'] + $statusData['cancelled'])) * 100) ?>%
+                                <?= $totalAppointments > 0 ? round(($statusData['scheduled'] / $totalAppointments) * 100) : 0 ?>%
                             </div>
                         </div>
                         
@@ -647,7 +1126,7 @@ if ($hour < 12) {
                                 <div class="status-count"><?= $statusData['cancelled'] ?></div>
                             </div>
                             <div class="status-percentage text-warning">
-                                <?= round(($statusData['cancelled'] / ($statusData['completed'] + $statusData['scheduled'] + $statusData['cancelled'])) * 100) ?>%
+                                <?= $totalAppointments > 0 ? round(($statusData['cancelled'] / $totalAppointments) * 100) : 0 ?>%
                             </div>
                         </div>
                     </div>
@@ -678,6 +1157,34 @@ if ($hour < 12) {
                                 </div>
                                 <div class="mt-2 text-muted">
                                     <i class="fas fa-teeth me-1"></i> <?= $appointment['treatment_type'] ? htmlspecialchars($appointment['treatment_type']) : 'General Checkup' ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                
+                <!-- Recent Invoices -->
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        <h5 class="dashboard-card-title"><i class="fas fa-file-invoice me-2"></i>Recent Invoices (MAD)</h5>
+                    </div>
+                    <div class="recent-appointments">
+                        <?php foreach ($recentInvoices as $invoice): ?>
+                            <div class="appointment-item">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <strong><?= htmlspecialchars($invoice['full_name']) ?></strong>
+                                    <span class="text-muted"><?= date('M d', strtotime($invoice['invoice_date'])) ?></span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold"><?= number_format($invoice['total_amount'], 2) ?> <span class="mad-currency">MAD</span></span>
+                                    <span class="invoice-status-badge 
+                                        <?= $invoice['status'] == 'paid' ? 'badge-paid' : 
+                                           ($invoice['status'] == 'pending' ? 'badge-pending' : 'badge-overdue') ?>">
+                                        <?= ucfirst($invoice['status']) ?>
+                                    </span>
+                                </div>
+                                <div class="mt-2 text-muted">
+                                    <i class="fas fa-calendar-day me-1"></i> Due: <?= date('M d, Y', strtotime($invoice['due_date'])) ?>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -773,35 +1280,36 @@ if ($hour < 12) {
         </div>
     </div>
 
-    <!-- Notification Toast -->
-    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="margin-bottom: 450px;">
+    <!-- Notification Container -->
+    <div class="notification-container" id="notificationContainer">
         <?php foreach ($notifications as $note): ?>
-        <div class="toast align-items-center text-white bg-primary border-0 show" role="alert">
-            <div class="d-flex">
-                <div class="toast-body">
-                    <strong>Your next appointment is</strong><br>
-                    <strong><?= htmlspecialchars($note['full_name']) ?></strong><br>
-                    <?= date('H:i', strtotime($note['appointment_time'])) ?> - <?= $note['appointment_date'] ?><br>
-                    <a href="appointments.php" class="text-white text-decoration-underline">View Appointment</a>
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        <div class="notification-toast <?= $note['minutes'] == 0 ? 'emergency' : '' ?>">
+            <div class="notification-icon">
+                <i class="fas fa-bell"></i>
             </div>
+            <div class="notification-content">
+                <h5>Upcoming Appointment</h5>
+                <p><strong><?= htmlspecialchars($note['full_name']) ?></strong> 
+                    <?= $note['minutes'] > 0 ? 'in ' . $note['minutes'] . ' minutes' : 'now' ?>
+                </p>
+                <p><?= date('h:i A', strtotime($note['appointment_time'])) ?> - Today</p>
+            </div>
+            <button class="notification-close">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
         <?php endforeach; ?>
     </div>
 
-  <audio id="alertSound" src="https://www.soundjay.com/button/sounds/beep-07.mp3" preload="auto"></audio>
-  <footer class="bg-light py-3 mt-auto">
-  <div class="container">
-    <p class="text-center text-muted mb-0" style="text-align: center;">
-      &copy; 2025 Dental Clinic. All rights reserved.
-    </p>
-  </div>
-</footer>
+    <!-- Audio Element for Notification Sound -->
+    <audio id="notificationSound">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3" type="audio/mpeg">
+    </audio>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
+        // Toggle sidebar
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const content = document.getElementById('mainContent');
@@ -898,20 +1406,40 @@ if ($hour < 12) {
                 }
             });
             
-            // Notification sound
-            const toastElList = [].slice.call(document.querySelectorAll('.toast'));
-            const alertSound = document.getElementById('alertSound');
+            // Notification functionality
+            const notificationContainer = document.getElementById('notificationContainer');
+            const notificationSound = document.getElementById('notificationSound');
             
-            if (toastElList.length > 0) {
-                toastElList.forEach(toastEl => {
-                    const bsToast = new bootstrap.Toast(toastEl, { delay: 10000 });
-                    bsToast.show();
+            // Close notification buttons
+            document.querySelectorAll('.notification-close').forEach(button => {
+                button.addEventListener('click', function() {
+                    this.closest('.notification-toast').remove();
+                    updateNotificationCount();
                 });
+            });
+            
+            // Function to update notification count
+            function updateNotificationCount() {
+                const badge = document.querySelector('.notification-badge');
+                const count = document.querySelectorAll('.notification-toast').length;
                 
-                // Play notification sound
-                alertSound.play().catch(() => {
-                    console.log('Auto-play blocked. Interaction required.');
-                });
+                if (badge) {
+                    if (count > 0) {
+                        badge.textContent = count;
+                    } else {
+                        badge.remove();
+                    }
+                } else if (count > 0) {
+                    const newBadge = document.createElement('span');
+                    newBadge.className = 'notification-badge';
+                    newBadge.textContent = count;
+                    document.getElementById('notifBell').appendChild(newBadge);
+                }
+            }
+            
+            // Play notification sound if there are notifications
+            if (<?= $notifCount ?> > 0) {
+                notificationSound.play();
             }
         });
     </script>

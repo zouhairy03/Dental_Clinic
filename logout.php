@@ -12,99 +12,346 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_logout'])) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Logout - DentalCare</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logout Confirmation - DentalCare</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary: #2cb5a0;
-            --secondary: #f0f7fa;
-            --accent: #ff7f50;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
         body {
             font-family: 'Poppins', sans-serif;
-            background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="%232cb5a033" d="M44.6,-58.1C56.3,-49.6,62.6,-33.3,66.1,-16.8C69.6,-0.3,70.4,16.5,63.9,29.1C57.4,41.7,43.7,50.2,29.9,56.9C16.1,63.6,2.2,68.5,-12.6,67.7C-27.4,66.8,-42.9,60.2,-55.4,50.3C-67.9,40.4,-77.3,27.2,-79.9,12.6C-82.5,-2.1,-78.3,-18.2,-69.3,-31.1C-60.3,-44,-46.5,-53.7,-32.3,-61.3C-18.1,-68.9,-3.5,-74.4,12.1,-71.3C27.7,-68.2,55.4,-56.5,62.7,-42.5C70,-28.5,57,-12.3,53.9,2.1C50.8,16.5,57.6,33,55.9,47.8C54.2,62.6,44,75.7,31.8,81.8C19.6,87.9,5.3,87.1,-8.2,84.1C-21.7,81.2,-35.3,76.1,-45.6,67.3C-55.9,58.4,-62.8,45.8,-68.9,33.3C-75,20.8,-80.3,8.4,-79.8,-3.7C-79.3,-15.8,-73,-31.6,-63.3,-44.5C-53.6,-57.4,-40.5,-67.4,-26.6,-74.3C-12.7,-81.1,2,-84.8,16.4,-83.3C30.8,-81.8,45.1,-75,56.8,-65.3C68.5,-55.5,77.7,-42.7,81.2,-28.6C84.7,-14.5,82.5,0.9,76.5,13.4C70.5,25.8,60.7,35.3,49.9,44.3C39.1,53.3,27.3,61.8,14.1,64.3C0.9,66.8,-13.6,63.4,-25.4,57.5C-37.2,51.6,-46.3,43.3,-54.3,34.1C-62.3,24.9,-69.2,14.8,-71.7,3.3C-74.3,-8.3,-72.5,-21.3,-66.3,-32.2C-60.1,-43.1,-49.5,-51.9,-37.8,-60.3C-26.1,-68.7,-13,-76.6,1.1,-78.6C15.2,-80.6,30.5,-76.7,44.6,-58.1Z"/></svg>'),
-                        linear-gradient(160deg, #f8f9fa 0%, #e3f2fd 100%);
-            background-size: cover;
-            height: 100vh;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%);
+            min-height: 100vh;
             display: flex;
             align-items: center;
+            justify-content: center;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
         }
 
-        .logout-card {
-            background: rgba(255,255,255,0.9);
-            border: 1px solid rgba(44,181,160,0.15);
-            border-radius: 20px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-            max-width: 500px;
-            margin: 0 auto;
-            padding: 2rem;
+        .container {
+            max-width: 480px;
+            width: 100%;
+            z-index: 2;
         }
 
-        .modal-content {
-            border-radius: 20px;
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            text-align: center;
+            padding: 45px 35px;
+            position: relative;
+            transition: all 0.4s ease;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 35px;
+            color: #2a6b7f;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .logo i {
+            color: #2cb5a0;
+            margin-right: 12px;
+            font-size: 2.2rem;
+        }
+
+        .icon-container {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #e0f7f4 0%, #d2f0ed 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            color: #2cb5a0;
+            font-size: 3.5rem;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(44, 181, 160, 0.15);
+        }
+
+        .icon-container::before {
+            content: '';
+            position: absolute;
+            top: -5px;
+            left: -5px;
+            right: -5px;
+            bottom: -5px;
+            border-radius: 50%;
+            border: 2px dashed rgba(44, 181, 160, 0.3);
+            animation: rotate 20s linear infinite;
+        }
+
+        .title {
+            font-size: 1.9rem;
+            font-weight: 600;
+            color: #1a3c48;
+            margin-bottom: 15px;
+            line-height: 1.3;
+        }
+
+        .message {
+            color: #5a6b78;
+            font-size: 1.08rem;
+            line-height: 1.6;
+            margin-bottom: 35px;
+            max-width: 350px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .actions {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 14px 32px;
+            border-radius: 50px;
+            font-weight: 500;
+            font-size: 1.05rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             border: none;
+            outline: none;
+            min-width: 150px;
+        }
+
+        .btn i {
+            margin-right: 10px;
+            font-size: 1.1rem;
+        }
+
+        .btn-cancel {
+            background: white;
+            color: #5a6b78;
+            border: 1px solid #e0e7ed;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        }
+
+        .btn-cancel:hover {
+            background: #f8fafc;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
         }
 
         .btn-logout {
-            background: var(--accent);
-            border: none;
-            padding: 0.8rem 2rem;
-            transition: all 0.3s ease;
+            background: linear-gradient(135deg, #ff7f50 0%, #ff6347 100%);
+            color: white;
+            box-shadow: 0 6px 20px rgba(255, 127, 80, 0.3);
         }
 
         .btn-logout:hover {
+            background: linear-gradient(135deg, #ff7340 0%, #ff5530 100%);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(255,127,80,0.3);
+            box-shadow: 0 8px 25px rgba(255, 127, 80, 0.4);
+        }
+
+        /* Loading state */
+        .loading-state .icon-container {
+            background: linear-gradient(135deg, #f8f9fa 0%, #f0f7fa 100%);
+        }
+
+        .loading-state .icon-container i {
+            color: #2cb5a0;
+            animation: pulse 1.5s infinite;
+        }
+
+        .loading-state .title {
+            color: #2cb5a0;
+        }
+
+        .loading-state .actions {
+            display: none;
+        }
+
+        .loading-message {
+            display: none;
+            font-size: 1.2rem;
+            color: #2a6b7f;
+            margin-top: 30px;
+            font-weight: 500;
+        }
+
+        .loading-state .loading-message {
+            display: block;
+            animation: fadeIn 0.5s forwards;
+        }
+
+        .countdown {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #ff7f50;
+            margin-top: 10px;
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Background elements */
+        .bg-element {
+            position: absolute;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(44, 181, 160, 0.08) 0%, rgba(255, 127, 80, 0.08) 100%);
+            z-index: 1;
+        }
+
+        .bg-1 {
+            width: 300px;
+            height: 300px;
+            top: -100px;
+            left: -100px;
+        }
+
+        .bg-2 {
+            width: 200px;
+            height: 200px;
+            bottom: -80px;
+            right: -80px;
+        }
+
+        .bg-3 {
+            width: 150px;
+            height: 150px;
+            top: 40%;
+            right: 10%;
+        }
+
+        /* Responsive design */
+        @media (max-width: 576px) {
+            .card {
+                padding: 35px 25px;
+            }
+            
+            .actions {
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+            
+            .title {
+                font-size: 1.7rem;
+            }
         }
     </style>
 </head>
 <body>
-    <!-- Confirmation Modal -->
-    <div class="modal fade show" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="false" style="display: block;">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header border-0">
-                    <h5 class="modal-title text-primary" id="logoutModalLabel">
-                        <i class="fas fa-sign-out-alt me-2"></i>Confirm Logout
-                    </h5>
-                </div>
-                <div class="modal-body text-center py-4">
-                    <div class="display-4 text-primary mb-3">
-                        <i class="fas fa-question-circle"></i>
-                    </div>
-                    <h5 class="mb-3">Are you sure you want to log out?</h5>
-                    <p class="text-muted">You'll need to log in again to access the system</p>
-                </div>
-                <div class="modal-footer border-0 justify-content-center">
-                    <form method="POST">
-                        <button type="button" class="btn btn-secondary me-3" onclick="window.history.back()">
-                            <i class="fas fa-times me-2"></i>Cancel
-                        </button>
-                        <button type="submit" name="confirm_logout" class="btn btn-logout text-white">
-                            <i class="fas fa-sign-out-alt me-2"></i>Log Out
-                        </button>
-                    </form>
-                </div>
+    <div class="bg-element bg-1"></div>
+    <div class="bg-element bg-2"></div>
+    <div class="bg-element bg-3"></div>
+    
+    <div class="container">
+        <div class="card" id="logoutCard">
+            <div class="logo">
+                <i class="fas fa-tooth"></i>
+                <span>DentalCare</span>
+            </div>
+            
+            <div class="icon-container">
+                <i class="fas fa-sign-out-alt" id="logoutIcon"></i>
+            </div>
+            
+            <h2 class="title" id="logoutTitle">Confirm Logout</h2>
+            
+            <p class="message" id="logoutMessage">Are you sure you want to log out? You'll need to sign in again to access your account.</p>
+            
+            <div class="actions">
+                <button class="btn btn-cancel" onclick="window.history.back()">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button class="btn btn-logout" id="logoutButton">
+                    <i class="fas fa-sign-out-alt"></i> Log Out
+                </button>
+            </div>
+            
+            <div class="loading-message" id="loadingMessage">
+                <div>See you again soon!</div>
+                <div class="countdown" id="countdown">Redirecting in 5 seconds...</div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Handle back button click
-        function goBack() {
-            window.history.back();
-        }
-        
-        // Initialize modal
-        var logoutModal = new bootstrap.Modal(document.getElementById('logoutModal'), {
-            backdrop: 'static',
-            keyboard: false
+        document.getElementById('logoutButton').addEventListener('click', function() {
+            const card = document.getElementById('logoutCard');
+            const title = document.getElementById('logoutTitle');
+            const icon = document.getElementById('logoutIcon');
+            const message = document.getElementById('logoutMessage');
+            const loadingMessage = document.getElementById('loadingMessage');
+            const countdown = document.getElementById('countdown');
+            
+            // Apply loading state styles
+            card.classList.add('loading-state');
+            title.textContent = "Logging you out...";
+            message.textContent = "Please wait while we securely end your session";
+            icon.className = "fas fa-spinner fa-spin";
+            
+            // Countdown timer
+            let seconds = 5;
+            countdown.textContent = `Redirecting in ${seconds} seconds...`;
+            
+            const timer = setInterval(() => {
+                seconds--;
+                countdown.textContent = `Redirecting in ${seconds} second${seconds !== 1 ? 's' : ''}...`;
+                
+                if (seconds <= 0) {
+                    clearInterval(timer);
+                    // Submit the form
+                    document.querySelector('form').submit();
+                }
+            }, 1000);
         });
-        logoutModal.show();
+        
+        // Create the form programmatically
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.style.display = 'none';
+        
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'confirm_logout';
+        input.value = '1';
+        
+        form.appendChild(input);
+        document.body.appendChild(form);
     </script>
 </body>
 </html>

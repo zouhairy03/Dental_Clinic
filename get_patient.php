@@ -26,6 +26,17 @@ if (isset($_GET['id'])) {
     $stmt->execute([$patientId]);
     $appointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
+    // Add status style for better visibility
+    foreach ($appointments as &$appointment) {
+        $appointment['status_style'] = match ($appointment['status']) {
+            'scheduled' => 'color: white; background-color: #2196F3; padding: 2px 8px; border-radius: 4px;',
+            'completed' => 'color: white; background-color: #4CAF50; padding: 2px 8px; border-radius: 4px;',
+            'cancelled' => 'color: white; background-color: #F44336; padding: 2px 8px; border-radius: 4px;',
+            default => ''
+        };
+    }
+    unset($appointment); // Break reference
+    
     $patient['appointments'] = $appointments;
     
     header('Content-Type: application/json');
@@ -35,3 +46,5 @@ if (isset($_GET['id'])) {
 
 http_response_code(400);
 echo json_encode(['error' => 'Invalid request']);
+exit; // Ensure script stops after sending error
+?>

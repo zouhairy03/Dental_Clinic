@@ -71,12 +71,12 @@ if (isset($_SESSION['notification'])) {
         * {
             font-family: 'Poppins', sans-serif;
         }
-
         body {
-            background: linear-gradient(135deg, var(--light-bg) 0%, var(--dark-bg) 100%);
-            min-height: 100vh;
+            font-family: 'Poppins', sans-serif;
+            background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="%232cb5a033" d="M44.6,-58.1C56.3,-49.6,62.6,-33.3,66.1,-16.8C69.6,-0.3,70.4,16.5,63.9,29.1C57.4,41.7,43.7,50.2,29.9,56.9C16.1,63.6,2.2,68.5,-12.6,67.7C-27.4,66.8,-42.9,60.2,-55.4,50.3C-67.9,40.4,-77.3,27.2,-79.9,12.6C-82.5,-2.1,-78.3,-18.2,-69.3,-31.1C-60.3,-44,-46.5,-53.7,-32.3,-61.3C-18.1,-68.9,-3.5,-74.4,12.1,-71.3C27.7,-68.2,55.4,-56.5,62.7,-42.5C70,-28.5,57,-12.3,53.9,2.1C50.8,16.5,57.6,33,55.9,47.8C54.2,62.6,44,75.7,31.8,81.8C19.6,87.9,5.3,87.1,-8.2,84.1C-21.7,81.2,-35.3,76.1,-45.6,67.3C-55.9,58.4,-62.8,45.8,-68.9,33.3C-75,20.8,-80.3,8.4,-79.8,-3.7C-79.3,-15.8,-73,-31.6,-63.3,-44.5C-53.6,-57.4,-40.5,-67.4,-26.6,-74.3C-12.7,-81.1,2,-84.8,16.4,-83.3C30.8,-81.8,45.1,-75,56.8,-65.3C68.5,-55.5,77.7,-42.7,81.2,-28.6C84.7,-14.5,82.5,0.9,76.5,13.4C70.5,25.8,60.7,35.3,49.9,44.3C39.1,53.3,27.3,61.8,14.1,64.3C0.9,66.8,-13.6,63.4,-25.4,57.5C-37.2,51.6,-46.3,43.3,-54.3,34.1C-62.3,24.9,-69.2,14.8,-71.7,3.3C-74.3,-8.3,-72.5,-21.3,-66.3,-32.2C-60.1,-43.1,-49.5,-51.9,-37.8,-60.3C-26.1,-68.7,-13,-76.6,1.1,-78.6C15.2,-80.6,30.5,-76.7,44.6,-58.1Z"/></svg>'),
+                        linear-gradient(160deg, #f8f9fa 0%, #e3f2fd 100%);
+            background-size: cover;
             padding: 2rem;
-            animation: fadeIn 0.5s ease-in-out;
         }
 
         @keyframes fadeIn {
@@ -634,18 +634,62 @@ if (isset($_SESSION['notification'])) {
     </div>
 
     <div class="dashboard-container">
-        <nav class="breadcrumb bg-white px-3 py-2 rounded mb-4">
-            <ol class="breadcrumb m-0">
-                <li class="breadcrumb-item">
-                    <a href="dashboard.php" class="text-decoration-none text-primary">
-                        <i class="fas fa-home me-2"></i>Dashboard
-                    </a>
-                </li>
-                <li class="breadcrumb-item active">
-                    <i class="fas fa-calendar-check me-2"></i>Appointments
-                </li>
-            </ol>
-        </nav>
+    <nav class="breadcrumb px-3 py-2 mb-4">
+    <ol class="breadcrumb m-0">
+    <style>
+        .breadcrumb {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 1rem;
+            border-radius: 12px;
+            /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); */
+        }
+
+        .breadcrumb-item a {
+            color: #2cb5a0; /* var(--primary) */
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .breadcrumb-item a:hover {
+            color: #1f8e7d;
+        }
+    </style>
+
+    <li class="breadcrumb-item">
+        <a href="dashboard.php">
+            <i class="fas fa-home me-2"></i>Dashboard
+        </a>
+    </li>
+    <li class="breadcrumb-item active">
+        <i class="fas fa-calendar-check me-2"></i>Appointments
+    </li>
+</ol>
+
+</nav>
+
+<style>
+.breadcrumb {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 1rem;
+    /* border-radius: 12px; */
+    /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); */
+}
+
+.breadcrumb-item a {
+    color: var(--primary);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.breadcrumb-item a:hover {
+    color: #1f8e7d;
+}
+
+.breadcrumb-item.active {
+    font-weight: bold;
+    color: #6c757d;
+}
+</style>
 
         <div class="card calendar-header">
             <div class="calendar-controls">
