@@ -1,6 +1,12 @@
 <?php
 require_once 'config.php';
+// Restrict access if not logged in
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: index.php');
+    exit;
+}
 
+$adminName = htmlspecialchars($_SESSION['admin_name'] ?? 'Doctor');
 // Get date range from request or set defaults
 $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-d', strtotime('-30 days'));
 $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');

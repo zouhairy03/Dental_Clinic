@@ -1,6 +1,12 @@
 <?php
 require_once 'config.php';
+// Restrict access if not logged in
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: index.php');
+    exit;
+}
 
+$adminName = htmlspecialchars($_SESSION['admin_name'] ?? 'Doctor');
 // Set headers
 header("Content-Type: application/vnd.ms-excel; charset=utf-8");
 header("Content-Disposition: attachment; filename=patients_" . date('Y-m-d') . ".xls");

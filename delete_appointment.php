@@ -1,6 +1,12 @@
 <?php
 require_once 'config.php';
+// Restrict access if not logged in
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: index.php');
+    exit;
+}
 
+$adminName = htmlspecialchars($_SESSION['admin_name'] ?? 'Doctor');
 $id = $_GET['id'] ?? $_POST['id'] ?? null;
 
 // Redirect if ID is missing or invalid

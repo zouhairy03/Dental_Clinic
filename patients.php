@@ -1,6 +1,12 @@
 <?php
 require_once 'config.php';
+// Restrict access if not logged in
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: index.php');
+    exit;
+}
 
+$adminName = htmlspecialchars($_SESSION['admin_name'] ?? 'Doctor');
 // Add columns if they don't exist
 try {
     $pdo->query("ALTER TABLE patients 

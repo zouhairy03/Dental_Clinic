@@ -1,6 +1,12 @@
 <?php
 session_start();
+// Restrict access if not logged in
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: index.php');
+    exit;
+}
 
+$adminName = htmlspecialchars($_SESSION['admin_name'] ?? 'Doctor');
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_logout'])) {
     session_destroy();
     header('Location: index.php');

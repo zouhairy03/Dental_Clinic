@@ -2,6 +2,13 @@
 require_once 'config.php';
 // session_start();
 
+// Restrict access if not logged in
+if (!isset($_SESSION['admin_id'])) {
+    header('Location: index.php');
+    exit;
+}
+
+$adminName = htmlspecialchars($_SESSION['admin_name'] ?? 'Doctor');
 // Calendar configuration
 $currentMonth = $_GET['month'] ?? date('Y-m');
 $search = $_GET['search'] ?? '';

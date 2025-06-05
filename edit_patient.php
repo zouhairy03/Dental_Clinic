@@ -1,6 +1,6 @@
 <?php
 require_once 'config.php';
-
+ 
 $id = $_GET['id'] ?? null;
 if (!$id) {
     header('Location: patients.php?error=1');
